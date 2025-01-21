@@ -135,6 +135,9 @@ class Hunyuan3DPaintPipeline:
         if method == 'fast':
             texture, ori_trust_map = self.render.fast_bake_texture(
                 project_textures, project_weighted_cos_maps)
+
+            final_texture_linear_torch = torch.tensor(texture).float()
+            texture = self.render.color_rgb_to_srgb(final_texture_linear_torch)
         else:
             raise f'no method {method}'
         return texture, ori_trust_map > 1E-8
@@ -147,7 +150,8 @@ class Hunyuan3DPaintPipeline:
         return texture
 
     @torch.no_grad()
-    def __call__(self, mesh, image):
+    def __call__(self, mesh, image, texture_size=2048):
+        self.render.set_default_texture_resolution(texture_size)
 
         if isinstance(image, str):
             image_prompt = Image.open(image)

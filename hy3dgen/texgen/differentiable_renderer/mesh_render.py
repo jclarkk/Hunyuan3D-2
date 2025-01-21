@@ -330,7 +330,7 @@ class MeshRender():
         image_srgb = torch.where(
             image_rgb <= 0.0031308,
             12.92 * image_rgb,
-            1.055 * torch.pow(image_rgb, 1 / 2.4) - 0.055
+            1.055 * torch.pow(image_rgb, 1 / 2.0) - 0.055
         )
 
         if isinstance(image, Image.Image):

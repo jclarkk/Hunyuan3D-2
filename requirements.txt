@@ -27,3 +27,5 @@ rembg
 onnxruntime
 pygltflib
 sentencepiece
+timm
+PyNanoInstantMeshes

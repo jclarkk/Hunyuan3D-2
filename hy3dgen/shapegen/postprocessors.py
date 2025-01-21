@@ -22,9 +22,11 @@
 # fine-tuning enabling code and other elements of the foregoing made publicly available
 # by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
 
+import numpy as np
 import tempfile
 from typing import Union
 
+import pynanoinstantmeshes as PyNIM
 import pymeshlab
 import trimesh
 
@@ -120,14 +122,48 @@ def import_mesh(mesh: Union[pymeshlab.MeshSet, trimesh.Trimesh, Latent2MeshOutpu
 
 class FaceReducer:
     def __call__(
-        self,
-        mesh: Union[pymeshlab.MeshSet, trimesh.Trimesh, Latent2MeshOutput, str],
-        max_facenum: int = 40000
+            self,
+            mesh: Union[pymeshlab.MeshSet, trimesh.Trimesh, Latent2MeshOutput, str],
+            max_facenum: int = 50000
     ) -> Union[pymeshlab.MeshSet, trimesh.Trimesh]:
-        ms = import_mesh(mesh)
-        ms = reduce_face(ms, max_facenum=max_facenum)
-        mesh = export_mesh(mesh, ms)
+        target_vertex_count = int(max_facenum / 8)
+
+        print(f"Reducing face count to {max_facenum}...")
+
+        vertices, faces = PyNIM.remesh(
+            np.array(mesh.vertices, dtype=np.float32),
+            np.array(mesh.faces, dtype=np.uint32),
+            target_vertex_count,
+            align_to_boundaries=True,
+            smooth_iter=8
+        )
+        vertices = vertices.astype(np.float32)
+        faces = self.quads_to_triangles(faces)
+        mesh = trimesh.Trimesh(vertices, faces)
+        mesh = trimesh.smoothing.filter_laplacian(mesh)
+
+        if len(mesh.faces) > max_facenum:
+            ms = import_mesh(mesh)
+            ms = reduce_face(ms, max_facenum=max_facenum)
+            current_mesh = ms.current_mesh()
+            mesh = trimesh.Trimesh(vertices=current_mesh.vertex_matrix(), faces=current_mesh.face_matrix())
+
+        print(f"Resulting mesh has {len(mesh.faces)} faces")
+
         return mesh
+
+    @staticmethod
+    def quads_to_triangles(quads):
+        triangles = []
+
+        for quad in quads:
+            if len(quad) != 4:
+                raise ValueError("Each quad must have exactly 4 vertices.")
+
+            triangles.append([quad[0], quad[1], quad[2]])
+            triangles.append([quad[0], quad[2], quad[3]])
+
+        return np.array(triangles)
 
 
 class FloaterRemover:
