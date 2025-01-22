@@ -126,7 +126,7 @@ class Hunyuan3DPaintPipeline:
         project_textures, project_weighted_cos_maps = [], []
         project_boundary_maps = []
         for view, camera_elev, camera_azim, weight in zip(
-            views, camera_elevs, camera_azims, view_weights):
+                views, camera_elevs, camera_azims, view_weights):
             project_texture, project_cos_map, project_boundary_map = self.render.back_project(
                 view, camera_elev, camera_azim)
             project_cos_map = weight * (project_cos_map ** self.config.bake_exp)
@@ -180,6 +180,11 @@ class Hunyuan3DPaintPipeline:
         multiviews = self.models['multiview_model'](image_prompt, normal_maps + position_maps, camera_info)
 
         if upscale:
+            if texture_size == 4096:
+                # Resize multiviews to 1024x1024 first
+                for i in range(len(multiviews)):
+                    multiviews[i] = multiviews[i].resize((1024, 1024))
+
             # Multi view images are 512x512 so we will use Real-ESRGAN to upscale them to 2048x2048
             new_multiviews = []
 
@@ -195,7 +200,6 @@ class Hunyuan3DPaintPipeline:
                 multiviews[i] = multiviews[i].resize(
                     (self.config.render_size, self.config.render_size))
 
-
         texture, mask = self.bake_from_multiview(multiviews,
                                                  selected_camera_elevs, selected_camera_azims, selected_view_weights,
                                                  method=self.config.merge_method)
@@ -208,6 +212,7 @@ class Hunyuan3DPaintPipeline:
         textured_mesh = self.render.save_mesh()
 
         return textured_mesh
+
 
 def load_upscaler():
     upscaler = AuraSR.from_pretrained()
