@@ -30,6 +30,8 @@ import numpy as np
 import torch
 from PIL import Image
 
+from aura_sr import AuraSR
+
 from .differentiable_renderer.mesh_render import MeshRender
 from .utils.dehighlight_utils import Light_Shadow_Remover
 from .utils.multiview_utils import Multiview_Diffusion_Net
@@ -150,7 +152,7 @@ class Hunyuan3DPaintPipeline:
         return texture
 
     @torch.no_grad()
-    def __call__(self, mesh, image, texture_size=2048):
+    def __call__(self, mesh, image, texture_size=2048, upscale=False):
         self.render.set_default_texture_resolution(texture_size)
 
         if isinstance(image, str):
@@ -177,9 +179,22 @@ class Hunyuan3DPaintPipeline:
                        zip(selected_camera_azims, selected_camera_elevs)]
         multiviews = self.models['multiview_model'](image_prompt, normal_maps + position_maps, camera_info)
 
-        for i in range(len(multiviews)):
-            multiviews[i] = multiviews[i].resize(
-                (self.config.render_size, self.config.render_size))
+        if upscale:
+            # Multi view images are 512x512 so we will use Real-ESRGAN to upscale them to 2048x2048
+            new_multiviews = []
+
+            upscaler = load_upscaler()
+            for i in range(len(multiviews)):
+                rgb_img = multiviews[i].convert("RGB")
+                upscaled_img = upscaler.upscale_4x(rgb_img)
+                new_multiviews.append(upscaled_img)
+
+            multiviews = new_multiviews
+        else:
+            for i in range(len(multiviews)):
+                multiviews[i] = multiviews[i].resize(
+                    (self.config.render_size, self.config.render_size))
+
 
         texture, mask = self.bake_from_multiview(multiviews,
                                                  selected_camera_elevs, selected_camera_azims, selected_view_weights,
@@ -193,3 +208,7 @@ class Hunyuan3DPaintPipeline:
         textured_mesh = self.render.save_mesh()
 
         return textured_mesh
+
+def load_upscaler():
+    upscaler = AuraSR.from_pretrained()
+    return upscaler

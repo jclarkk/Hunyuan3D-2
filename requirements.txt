@@ -34,3 +34,4 @@ fastapi
 uvicorn
 timm
 PyNanoInstantMeshes
+aura-sr
