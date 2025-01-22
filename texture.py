@@ -1,12 +1,10 @@
 import argparse
 import os
 import time
-import torch
+import trimesh
 from PIL import Image
-from uuid import uuid4
 
 from hy3dgen.rmbg import preprocess_image
-from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline, FaceReducer, FloaterRemover, DegenerateFaceRemover
 from hy3dgen.texgen import Hunyuan3DPaintPipeline
 
 
@@ -26,17 +24,8 @@ def run(args):
     t1 = time.time()
     print(f"Image processing took {t1 - t0:.2f} seconds")
 
-    pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained('tencent/Hunyuan3D-2')
-
-    # Generate mesh
-    t2 = time.time()
-    mesh = pipeline(image=image, num_inference_steps=30, mc_algo='mc',
-                    generator=torch.manual_seed(args.seed))[0]
-    mesh = FloaterRemover()(mesh)
-    mesh = DegenerateFaceRemover()(mesh)
-    mesh = FaceReducer()(mesh)
-    t3 = time.time()
-    print(f"Mesh generation took {t3 - t2:.2f} seconds")
+    # Load mesh
+    mesh = trimesh.load_mesh(args.mesh_path)
 
     # Generate texture
     t4 = time.time()
@@ -47,11 +36,9 @@ def run(args):
 
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # Use image file name as output name
-    if len(args.image_paths) == 1:
-        output_name = os.path.splitext(os.path.basename(args.image_paths[0]))[0]
-    else:
-        output_name = str(uuid4()).replace('-', '')
+    # Use mesh file name as output name
+    output_name = os.path.splitext(os.path.basename(args.mesh_path))[0] + '_textured'
+
     mesh.export(os.path.join(args.output_dir, '{}.glb'.format(output_name)))
 
     print(f"Output saved to {args.output_dir}/{output_name}.glb")
@@ -63,6 +50,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--image_paths', type=str, nargs='+', required=True,
                         help='Path to input images. Can specify multiple paths separated by spaces')
+    parser.add_argument('--mesh_path', type=str, help='Path to input mesh', required=True)
     parser.add_argument('--output_dir', type=str, default='./output', help='Path to output directory')
     parser.add_argument('--seed', type=int, default=0, help='Seed for the random number generator')
     parser.add_argument('--texture_size', type=int, default=2048,
