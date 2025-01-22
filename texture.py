@@ -5,6 +5,7 @@ import trimesh
 from PIL import Image
 
 from hy3dgen.rmbg import preprocess_image
+from hy3dgen.shapegen.postprocessors import import_mesh, reduce_face
 from hy3dgen.texgen import Hunyuan3DPaintPipeline
 from hy3dgen.text2image import HunyuanDiTPipeline
 
@@ -37,6 +38,12 @@ def run(args):
 
     # Load mesh
     mesh = trimesh.load_mesh(args.mesh_path)
+
+    # Reduce face count
+    ms = import_mesh(mesh)
+    ms = reduce_face(ms, max_facenum=50000)
+    current_mesh = ms.current_mesh()
+    mesh = trimesh.Trimesh(vertices=current_mesh.vertex_matrix(), faces=current_mesh.face_matrix())
 
     # Generate texture
     t4 = time.time()
