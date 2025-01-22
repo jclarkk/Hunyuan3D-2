@@ -16,7 +16,7 @@ def run(args):
     if args.prompt is not None and args.image_paths is not None:
         raise ValueError("Please provide either a prompt or an image, not both")
 
-    if args.texture_size != 2048 or args.texture_size != 4096:
+    if args.texture_size not in [2048, 4096]:
         raise ValueError("Texture size must either be 2k or 4k")
 
     if args.prompt is not None:
