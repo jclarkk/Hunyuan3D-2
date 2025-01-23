@@ -1,6 +1,7 @@
 import argparse
 import os
 import time
+import torch.cuda
 import trimesh
 from PIL import Image
 
@@ -21,20 +22,25 @@ def run(args):
         raise ValueError("Texture size must either be 2k or 4k")
 
     if args.prompt is not None:
+        t0 = time.time()
         t2i = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled')
         image = t2i(args.prompt)
+        t1 = time.time()
+        print(f"Text to image took {t1 - t0:.2f} seconds")
+        del t2i
+        torch.cuda.empty_cache()
     else:
         # Only one image supported right now
         image_path = args.image_paths[0]
         image = Image.open(image_path)
 
-    t0 = time.time()
+    t2 = time.time()
 
     # Preprocess the image
     image = preprocess_image(image)
 
-    t1 = time.time()
-    print(f"Image processing took {t1 - t0:.2f} seconds")
+    t3 = time.time()
+    print(f"Image processing took {t3 - t2:.2f} seconds")
 
     # Load mesh
     mesh = trimesh.load_mesh(args.mesh_path)
