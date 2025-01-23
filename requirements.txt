@@ -12,6 +12,7 @@ torchvision
 #ConfigArgParse
 #ipdb
 omegaconf
+huggingface-hub
 
 #sentencepiece
 tqdm
