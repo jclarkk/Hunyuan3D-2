@@ -105,7 +105,7 @@ pip install -r requirements.txt
 cd hy3dgen/texgen/custom_rasterizer
 python3 setup.py install
 cd hy3dgen/texgen/differentiable_renderer
-bash compile_mesh_painter.sh
+bash compile_mesh_painter.sh OR python3 setup.py install (on Windows)
 ```
 
 ### APIの使い方
@@ -166,6 +166,9 @@ python3 gradio_app.py
     title={Hunyuan3D 2.0: Scaling Diffusion Models for High Resolution Textured 3D Assets Generation},
     author={Tencent Hunyuan3D Team},
     year={2025},
+    eprint={2501.12202},
+    archivePrefix={arXiv},
+    primaryClass={cs.CV}
 }
 
 @misc{yang2024tencent,
