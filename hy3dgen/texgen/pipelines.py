@@ -196,8 +196,10 @@ class Hunyuan3DPaintPipeline:
 
         image_prompt = self.recenter_image(image_prompt)
 
+        print('Removing light and shadow...')
         image_prompt = self.models['delight_model'](image_prompt)
 
+        print('Wrapping UV...')
         mesh = mesh_uv_wrap(mesh)
 
         self.render.load_mesh(mesh)
@@ -218,7 +220,6 @@ class Hunyuan3DPaintPipeline:
         multiviews = self.models['multiview_model'](image_prompt, normal_maps + position_maps, camera_info)
 
         if upscale:
-            print('Upscaling multiviews...')
             if texture_size == 4096:
                 # Resize multiviews to 1024x1024 first
                 for i in range(len(multiviews)):
@@ -228,7 +229,9 @@ class Hunyuan3DPaintPipeline:
             new_multiviews = []
 
             upscaler = load_upscaler()
-            for i in range(len(multiviews)):
+
+            from tqdm import tqdm
+            for i in tqdm(range(len(multiviews)), desc="Processing multiviews"):
                 rgb_img = multiviews[i].convert("RGB")
                 upscaled_img = upscaler.upscale_4x(rgb_img)
                 new_multiviews.append(upscaled_img)
