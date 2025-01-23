@@ -205,6 +205,7 @@ class Hunyuan3DPaintPipeline:
         selected_camera_elevs, selected_camera_azims, selected_view_weights = \
             self.config.candidate_camera_elevs, self.config.candidate_camera_azims, self.config.candidate_view_weights
 
+        print('Rendering normal maps...')
         normal_maps = self.render_normal_multiview(
             selected_camera_elevs, selected_camera_azims, use_abs_coor=True)
         position_maps = self.render_position_multiview(
@@ -213,9 +214,11 @@ class Hunyuan3DPaintPipeline:
         camera_info = [(((azim // 30) + 9) % 12) // {-20: 1, 0: 1, 20: 1, -90: 3, 90: 3}[
             elev] + {-20: 0, 0: 12, 20: 24, -90: 36, 90: 40}[elev] for azim, elev in
                        zip(selected_camera_azims, selected_camera_elevs)]
+        print('Generate multiviews...')
         multiviews = self.models['multiview_model'](image_prompt, normal_maps + position_maps, camera_info)
 
         if upscale:
+            print('Upscaling multiviews...')
             if texture_size == 4096:
                 # Resize multiviews to 1024x1024 first
                 for i in range(len(multiviews)):
@@ -236,12 +239,14 @@ class Hunyuan3DPaintPipeline:
                 multiviews[i] = multiviews[i].resize(
                     (self.config.render_size, self.config.render_size))
 
+        print('Baking texture...')
         texture, mask = self.bake_from_multiview(multiviews,
                                                  selected_camera_elevs, selected_camera_azims, selected_view_weights,
                                                  method=self.config.merge_method)
 
         mask_np = (mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
 
+        print('Inpainting texture...')
         texture = self.texture_inpaint(texture, mask_np)
 
         self.render.set_texture(texture)
