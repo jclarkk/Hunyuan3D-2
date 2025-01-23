@@ -21,7 +21,7 @@ trimesh
 pymeshlab
 pygltflib
 xatlas
-#kornia
+kornia
 #facexlib
 
 # Training
