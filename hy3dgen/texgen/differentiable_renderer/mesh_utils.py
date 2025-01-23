@@ -22,7 +22,9 @@
 # fine-tuning enabling code and other elements of the foregoing made publicly available
 # by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
 
+import numpy as np
 import trimesh
+import trimesh.visual
 
 
 def load_mesh(mesh):
@@ -37,8 +39,17 @@ def load_mesh(mesh):
     return vtx_pos, pos_idx, vtx_uv, uv_idx, texture_data
 
 
-def save_mesh(mesh, texture_data):
+def save_mesh(mesh, texture_data, normal_map=None, metalness_roughness_map=None):
     material = trimesh.visual.texture.SimpleMaterial(image=texture_data, diffuse=(255, 255, 255))
-    texture_visuals = trimesh.visual.TextureVisuals(uv=mesh.visual.uv, image=texture_data, material=material)
-    mesh.visual = texture_visuals
+    if normal_map is not None and metalness_roughness_map is not None:
+        material = trimesh.visual.material.PBRMaterial(
+            baseColorTexture=texture_data,
+            baseColorFactor=np.array([255, 255, 255, 255], dtype=np.uint8),
+            normalTexture=normal_map,
+            metallicRoughnessTexture=metalness_roughness_map
+        )
+        mesh.visual = trimesh.visual.TextureVisuals(uv=mesh.visual.uv, material=material)
+    else:
+        texture_visuals = trimesh.visual.TextureVisuals(uv=mesh.visual.uv, image=texture_data, material=material)
+        mesh.visual = texture_visuals
     return mesh
