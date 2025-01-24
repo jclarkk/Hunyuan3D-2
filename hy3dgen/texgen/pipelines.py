@@ -48,9 +48,9 @@ class Hunyuan3DTexGenConfig:
         self.light_remover_ckpt_path = light_remover_ckpt_path
         self.multiview_ckpt_path = multiview_ckpt_path
 
-        self.candidate_camera_azims = [0, 90, 180, 270, 0, 180]
-        self.candidate_camera_elevs = [0, 0, 0, 0, 90, -90]
-        self.candidate_view_weights = [1, 0.1, 0.5, 0.1, 0.05, 0.05]
+        self.candidate_camera_azims = [0, 90, 180, 270, 45, 135, 225, 315, 0]
+        self.candidate_camera_elevs = [0, 0, 0, 0, 45, 45, 45, 45, -45]
+        self.candidate_view_weights = [1.0, 0.8, 0.8, 0.8, 0.6, 0.6, 0.6, 0.6, 0.7]
 
         self.render_size = 2048
         self.texture_size = 1024
@@ -214,8 +214,8 @@ class Hunyuan3DPaintPipeline:
         position_maps = self.render_position_multiview(
             selected_camera_elevs, selected_camera_azims)
 
-        camera_info = [(((azim // 30) + 9) % 12) // {-20: 1, 0: 1, 20: 1, -90: 3, 90: 3}[
-            elev] + {-20: 0, 0: 12, 20: 24, -90: 36, 90: 40}[elev] for azim, elev in
+        camera_info = [(((azim // 30) + 9) % 12) // {0: 1, 45: 1, -45: 1}[elev] +
+                       {0: 12, 45: 32, -45: 28}[elev] for azim, elev in
                        zip(selected_camera_azims, selected_camera_elevs)]
         print('Generate multiviews...')
         multiviews = self.models['multiview_model'](image_prompt, normal_maps + position_maps, camera_info)

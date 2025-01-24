@@ -156,11 +156,11 @@ class FaceReducer:
             mesh = trimesh.Trimesh(vertices, faces)
             mesh = trimesh.smoothing.filter_laplacian(mesh)
 
-            if len(mesh.faces) > max_facenum:
-                ms = import_mesh(mesh)
-                ms = reduce_face(ms, max_facenum=max_facenum)
-                current_mesh = ms.current_mesh()
-                mesh = trimesh.Trimesh(vertices=current_mesh.vertex_matrix(), faces=current_mesh.face_matrix())
+        if len(mesh.faces) > max_facenum:
+            ms = import_mesh(mesh)
+            ms = reduce_face(ms, max_facenum=max_facenum)
+            current_mesh = ms.current_mesh()
+            mesh = trimesh.Trimesh(vertices=current_mesh.vertex_matrix(), faces=current_mesh.face_matrix())
 
         print(f"Resulting mesh has {len(mesh.faces)} faces")
 
