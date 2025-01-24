@@ -34,22 +34,24 @@ def run(args):
         image_path = args.image_paths[0]
         image = Image.open(image_path)
 
-    t2 = time.time()
+    t0 = time.time()
 
     # Preprocess the image
     image = preprocess_image(image)
 
-    t3 = time.time()
-    print(f"Image processing took {t3 - t2:.2f} seconds")
+    t1 = time.time()
+    print(f"Image processing took {t1 - t0:.2f} seconds")
 
     # Load mesh
     mesh = trimesh.load_mesh(args.mesh_path)
+    mesh = trimesh.util.concatenate(list(mesh.geometry.values()))
 
     # Reduce face count
-    ms = import_mesh(mesh)
-    ms = reduce_face(ms, max_facenum=50000)
-    current_mesh = ms.current_mesh()
-    mesh = trimesh.Trimesh(vertices=current_mesh.vertex_matrix(), faces=current_mesh.face_matrix())
+    if len(mesh.faces) > 50000:
+        ms = import_mesh(mesh)
+        ms = reduce_face(ms, max_facenum=50000)
+        current_mesh = ms.current_mesh()
+        mesh = trimesh.Trimesh(vertices=current_mesh.vertex_matrix(), faces=current_mesh.face_matrix())
 
     # Generate texture
     t4 = time.time()

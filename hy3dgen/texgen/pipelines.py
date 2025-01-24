@@ -2,6 +2,7 @@
 # and Other Licenses of the Third-Party Components therein:
 # The below Model in this distribution may have been modified by THL A29 Limited
 # ("Tencent Modifications"). All Tencent Modifications are Copyright (C) 2024 THL A29 Limited.
+import sys
 
 # Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
 # The below software and/or models in this distribution may have been
@@ -138,8 +139,8 @@ class Hunyuan3DPaintPipeline:
             texture, ori_trust_map = self.render.fast_bake_texture(
                 project_textures, project_weighted_cos_maps)
 
-            final_texture_linear_torch = torch.tensor(texture).float()
-            texture = self.render.color_rgb_to_srgb(final_texture_linear_torch)
+            texture = texture.clone().detach().float()
+            texture = self.render.color_rgb_to_srgb(texture)
         else:
             raise f'no method {method}'
         return texture, ori_trust_map > 1E-8
@@ -220,23 +221,28 @@ class Hunyuan3DPaintPipeline:
         multiviews = self.models['multiview_model'](image_prompt, normal_maps + position_maps, camera_info)
 
         if upscale:
-            if texture_size == 4096:
-                # Resize multiviews to 1024x1024 first
-                for i in range(len(multiviews)):
-                    multiviews[i] = multiviews[i].resize((1024, 1024))
-
             # Multi view images are 512x512 so we will use Real-ESRGAN to upscale them to 2048x2048
             new_multiviews = []
 
             upscaler = load_upscaler()
+            print('Loaded upscaler...')
 
             from tqdm import tqdm
             for i in tqdm(range(len(multiviews)), desc="Processing multiviews"):
                 rgb_img = multiviews[i].convert("RGB")
-                upscaled_img = upscaler.upscale_4x(rgb_img)
+                upscaled_img = upscaler.upscale_4x_overlapped(rgb_img, max_batch_size=16)
+
+                if texture_size == 4096:
+                    upscaled_img.resize((4096, 4096))
+
                 new_multiviews.append(upscaled_img)
 
             multiviews = new_multiviews
+
+            del upscaler
+            torch.cuda.empty_cache()
+
+            print('Finished processing multiviews')
         else:
             for i in range(len(multiviews)):
                 multiviews[i] = multiviews[i].resize(
@@ -259,5 +265,5 @@ class Hunyuan3DPaintPipeline:
 
 
 def load_upscaler():
-    upscaler = AuraSR.from_pretrained()
+    upscaler = AuraSR.from_pretrained("fal/AuraSR-v2")
     return upscaler

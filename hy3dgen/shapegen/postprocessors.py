@@ -137,29 +137,30 @@ class FaceReducer:
     def __call__(
             self,
             mesh: Union[pymeshlab.MeshSet, trimesh.Trimesh, Latent2MeshOutput, str],
-            max_facenum: int = 50000
+            max_facenum: int = 50000,
+            im_remesh: bool = False
     ) -> Union[pymeshlab.MeshSet, trimesh.Trimesh]:
         target_vertex_count = int(max_facenum / 8)
 
         print(f"Reducing face count to {max_facenum}...")
+        if im_remesh:
+            vertices, faces = PyNIM.remesh(
+                np.array(mesh.vertices, dtype=np.float32),
+                np.array(mesh.faces, dtype=np.uint32),
+                target_vertex_count,
+                align_to_boundaries=True,
+                smooth_iter=8
+            )
+            vertices = vertices.astype(np.float32)
+            faces = self.quads_to_triangles(faces)
+            mesh = trimesh.Trimesh(vertices, faces)
+            mesh = trimesh.smoothing.filter_laplacian(mesh)
 
-        vertices, faces = PyNIM.remesh(
-            np.array(mesh.vertices, dtype=np.float32),
-            np.array(mesh.faces, dtype=np.uint32),
-            target_vertex_count,
-            align_to_boundaries=True,
-            smooth_iter=8
-        )
-        vertices = vertices.astype(np.float32)
-        faces = self.quads_to_triangles(faces)
-        mesh = trimesh.Trimesh(vertices, faces)
-        mesh = trimesh.smoothing.filter_laplacian(mesh)
-
-        if len(mesh.faces) > max_facenum:
-            ms = import_mesh(mesh)
-            ms = reduce_face(ms, max_facenum=max_facenum)
-            current_mesh = ms.current_mesh()
-            mesh = trimesh.Trimesh(vertices=current_mesh.vertex_matrix(), faces=current_mesh.face_matrix())
+            if len(mesh.faces) > max_facenum:
+                ms = import_mesh(mesh)
+                ms = reduce_face(ms, max_facenum=max_facenum)
+                current_mesh = ms.current_mesh()
+                mesh = trimesh.Trimesh(vertices=current_mesh.vertex_matrix(), faces=current_mesh.face_matrix())
 
         print(f"Resulting mesh has {len(mesh.faces)} faces")
 

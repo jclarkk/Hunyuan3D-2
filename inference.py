@@ -34,7 +34,7 @@ def run(args):
                     generator=torch.manual_seed(args.seed))[0]
     mesh = FloaterRemover()(mesh)
     mesh = DegenerateFaceRemover()(mesh)
-    mesh = FaceReducer()(mesh)
+    mesh = FaceReducer()(mesh, im_remesh=args.im_remesh)
     t3 = time.time()
     print(f"Mesh generation took {t3 - t2:.2f} seconds")
 
@@ -67,6 +67,7 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, default=0, help='Seed for the random number generator')
     parser.add_argument('--texture_size', type=int, default=2048,
                         help='Resolution size of the texture used for the GLB')
+    parser.add_argument('--im_remesh', action='store_true', help='Remesh using InstantMeshes', default=False)
 
     args = parser.parse_args()
 
