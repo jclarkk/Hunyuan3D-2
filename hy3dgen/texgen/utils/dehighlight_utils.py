@@ -43,7 +43,8 @@ class Light_Shadow_Remover():
         pipeline.scheduler = EulerAncestralDiscreteScheduler.from_config(pipeline.scheduler.config)
         pipeline.set_progress_bar_config(disable=True)
 
-        self.pipeline = pipeline.to(self.device, torch.float16)
+        # self.pipeline = pipeline.to(self.device, torch.float16)
+        self.pipeline = pipeline
 
     @torch.no_grad()
     def __call__(self, image):
@@ -59,14 +60,6 @@ class Light_Shadow_Remover():
             image_array[alpha_channel == 0, :3] = 255
             image_array[:, :, 3] = alpha_channel
             image = Image.fromarray(image_array)
-
-            image_tensor = torch.tensor(np.array(image) / 255.0).to(self.device)
-            alpha = image_tensor[:, :, 3:]
-            rgb_target = image_tensor[:, :, :3]
-        else:
-            image_tensor = torch.tensor(np.array(image) / 255.0).to(self.device)
-            alpha = torch.ones_like(image_tensor)[:, :, :1]
-            rgb_target = image_tensor[:, :, :3]
 
         image = image.convert('RGB')
 

@@ -3,6 +3,7 @@ import os
 import time
 import torch.cuda
 import trimesh
+from mmgp import offload
 from PIL import Image
 
 from hy3dgen.rmbg import preprocess_image
@@ -21,14 +22,27 @@ def run(args):
     if args.texture_size not in [2048, 4096]:
         raise ValueError("Texture size must either be 2k or 4k")
 
+    t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled')
+    texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2')
+
+    # Handle MMGP offloading
+    profile = args.profile
+    kwargs = {}
+
+    pipe = offload.extract_models("t2i_worker", t2i_pipeline)
+    pipe.update(offload.extract_models("texgen_worker", texture_pipeline))
+    texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
+
+    if profile != 1 and profile != 3:
+        kwargs["budgets"] = {"*": 2200}
+
+    offload.profile(pipe, profile_no=profile, verboseLevel=args.verbose, **kwargs)
+
     if args.prompt is not None:
         t0 = time.time()
-        t2i = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled')
-        image = t2i(args.prompt)
+        image = t2i_pipeline(args.prompt)
         t1 = time.time()
         print(f"Text to image took {t1 - t0:.2f} seconds")
-        del t2i
-        torch.cuda.empty_cache()
     else:
         # Only one image supported right now
         image_path = args.image_paths[0]
@@ -55,8 +69,7 @@ def run(args):
 
     # Generate texture
     t4 = time.time()
-    pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2')
-    mesh = pipeline(mesh, image=image, texture_size=args.texture_size, upscale=args.upscale)
+    mesh = texture_pipeline(mesh, image=image, texture_size=args.texture_size, upscale=args.upscale)
     t5 = time.time()
     print(f"Texture generation took {t5 - t4:.2f} seconds")
 
@@ -83,6 +96,8 @@ if __name__ == "__main__":
     parser.add_argument('--texture_size', type=int, default=2048,
                         help='Resolution size of the texture used for the GLB')
     parser.add_argument('--upscale', action='store_true', help='Upscale the texture', default=False)
+    parser.add_argument('--profile', type=int, default=1)
+    parser.add_argument('--verbose', type=int, default=1)
 
     args = parser.parse_args()
 

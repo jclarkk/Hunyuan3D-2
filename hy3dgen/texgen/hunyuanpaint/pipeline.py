@@ -111,7 +111,7 @@ class HunyuanPaintPipeline(StableDiffusionPipeline):
         negative_prompt='watermark, ugly, deformed, noisy, blurry, low contrast',
         *args,
         num_images_per_prompt: Optional[int] = 1,
-        guidance_scale=2.0,
+        guidance_scale=3.0,
         output_type: Optional[str] = "pil",
         width=512,
         height=512,
@@ -245,7 +245,7 @@ class HunyuanPaintPipeline(StableDiffusionPipeline):
         guidance_scale: float = 7.5,
         negative_prompt: Optional[Union[str, List[str]]] = None,
         num_images_per_prompt: Optional[int] = 1,
-        eta: float = 0.0,
+        eta: float = 1.0,
         generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
         latents: Optional[torch.Tensor] = None,
         prompt_embeds: Optional[torch.Tensor] = None,
@@ -255,7 +255,7 @@ class HunyuanPaintPipeline(StableDiffusionPipeline):
         output_type: Optional[str] = "pil",
         return_dict: bool = True,
         cross_attention_kwargs: Optional[Dict[str, Any]] = None,
-        guidance_rescale: float = 0.0,
+        guidance_rescale: float = 1,
         clip_skip: Optional[int] = None,
         callback_on_step_end: Optional[
             Union[Callable[[int, int, Dict], None], PipelineCallback, MultiPipelineCallbacks]
