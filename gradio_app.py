@@ -26,7 +26,7 @@ def get_example_txt_list():
 
 def gen_save_folder(max_size=60):
     os.makedirs(SAVE_DIR, exist_ok=True)
-    exists = set(int(_) for _ in os.listdir(SAVE_DIR) if not _.startswith("."))
+    exists = set(int(_) for _ in os.listdir(SAVE_DIR) if _.isdigit())
     cur_id = min(set(range(max_size)) - exists) if len(exists) < max_size else -1
     if os.path.exists(f"{SAVE_DIR}/{(cur_id + 1) % max_size}"):
         shutil.rmtree(f"{SAVE_DIR}/{(cur_id + 1) % max_size}")
@@ -353,11 +353,6 @@ if __name__ == '__main__':
     """
     example_is = get_example_img_list()
     example_ts = get_example_txt_list()
-
-    from hy3dgen.texgen import Hunyuan3DPaintPipeline
-
-    texgen_worker = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2')
-    HAS_TEXTUREGEN = True
 
     try:
         from hy3dgen.texgen import Hunyuan3DPaintPipeline
