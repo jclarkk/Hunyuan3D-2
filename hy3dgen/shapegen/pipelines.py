@@ -140,9 +140,10 @@ class Hunyuan3DDiTPipeline:
             cls,
             ckpt_path,
             config_path,
-            device='cpu',
+            device='cuda',
             dtype=torch.float16,
             use_safetensors=None,
+            use_mmgp=False,
             **kwargs,
     ):
         # load config
@@ -170,18 +171,29 @@ class Hunyuan3DDiTPipeline:
         else:
             ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=True)
         # load model
-        from accelerate import init_empty_weights
-        with init_empty_weights():
+        if use_mmgp:
+            from accelerate import init_empty_weights
+            with init_empty_weights():
+                model = instantiate_from_config(config['model'])
+                vae = instantiate_from_config(config['vae'])
+                conditioner = instantiate_from_config(config['conditioner'])
+                image_processor = instantiate_from_config(config['image_processor'])
+                scheduler = instantiate_from_config(config['scheduler'])
+
+            model.load_state_dict(ckpt['model'], assign=True)
+            vae.load_state_dict(ckpt['vae'], assign=True)
+            if 'conditioner' in ckpt:
+                conditioner.load_state_dict(ckpt['conditioner'], assign=True)
+        else:
             model = instantiate_from_config(config['model'])
+            model.load_state_dict(ckpt['model'])
             vae = instantiate_from_config(config['vae'])
+            vae.load_state_dict(ckpt['vae'])
             conditioner = instantiate_from_config(config['conditioner'])
+            if 'conditioner' in ckpt:
+                conditioner.load_state_dict(ckpt['conditioner'])
             image_processor = instantiate_from_config(config['image_processor'])
             scheduler = instantiate_from_config(config['scheduler'])
-
-        model.load_state_dict(ckpt['model'], assign=True)
-        vae.load_state_dict(ckpt['vae'], assign=True)
-        if 'conditioner' in ckpt:
-            conditioner.load_state_dict(ckpt['conditioner'], assign=True)
 
         model_kwargs = dict(
             vae=vae,
@@ -207,6 +219,7 @@ class Hunyuan3DDiTPipeline:
         device='cuda',
         dtype=torch.float16,
         use_safetensors=None,
+        use_mmgp=False,
         **kwargs,
     ):
         original_model_path = model_path
@@ -236,6 +249,7 @@ class Hunyuan3DDiTPipeline:
             device=device,
             dtype=dtype,
             use_safetensors=use_safetensors,
+            use_mmgp=use_mmgp,
             **kwargs
         )
 
@@ -518,14 +532,16 @@ class Hunyuan3DDiTFlowMatchingPipeline(Hunyuan3DDiTPipeline):
         num_chunks=8000,
         output_type: Optional[str] = "trimesh",
         enable_pbar=True,
+        use_mmgp=False,
         **kwargs,
     ) -> List[List[trimesh.Trimesh]]:
-        torch.set_default_device("cpu")
+        if use_mmgp:
+            torch.set_default_device("cpu")
 
         callback = kwargs.pop("callback", None)
         callback_steps = kwargs.pop("callback_steps", None)
 
-        device = torch.device("cuda")
+        device = torch.device("cuda") if use_mmgp else self.device
         dtype = self.dtype
         do_classifier_free_guidance = guidance_scale >= 0 and not (
             hasattr(self.model, 'guidance_embed') and

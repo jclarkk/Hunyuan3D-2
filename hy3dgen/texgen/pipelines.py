@@ -43,8 +43,8 @@ logger = logging.getLogger(__name__)
 
 class Hunyuan3DTexGenConfig:
 
-    def __init__(self, light_remover_ckpt_path, multiview_ckpt_path):
-        self.device = 'cpu'
+    def __init__(self, light_remover_ckpt_path, multiview_ckpt_path, use_mmgp=False):
+        self.device = 'cpu' if use_mmgp else 'cuda'
         self.light_remover_ckpt_path = light_remover_ckpt_path
         self.multiview_ckpt_path = multiview_ckpt_path
 
@@ -65,7 +65,7 @@ class Hunyuan3DTexGenConfig:
 
 class Hunyuan3DPaintPipeline:
     @classmethod
-    def from_pretrained(cls, model_path):
+    def from_pretrained(cls, model_path, use_mmgp=False):
         original_model_path = model_path
         if not os.path.exists(model_path):
             # try local path
@@ -82,33 +82,36 @@ class Hunyuan3DPaintPipeline:
                     model_path = huggingface_hub.snapshot_download(repo_id=original_model_path)
                     delight_model_path = os.path.join(model_path, 'hunyuan3d-delight-v2-0')
                     multiview_model_path = os.path.join(model_path, 'hunyuan3d-paint-v2-0')
-                    return cls(Hunyuan3DTexGenConfig(delight_model_path, multiview_model_path))
+                    return cls(Hunyuan3DTexGenConfig(delight_model_path, multiview_model_path, use_mmgp=use_mmgp),
+                               use_mmgp=use_mmgp)
                 except ImportError:
                     logger.warning(
                         "You need to install HuggingFace Hub to load models from the hub."
                     )
                     raise RuntimeError(f"Model path {model_path} not found")
             else:
-                return cls(Hunyuan3DTexGenConfig(delight_model_path, multiview_model_path))
+                return cls(Hunyuan3DTexGenConfig(delight_model_path, multiview_model_path, use_mmgp=use_mmgp),
+                           use_mmgp=use_mmgp)
 
         raise FileNotFoundError(f"Model path {original_model_path} not found and we could not find it at huggingface")
 
-    def __init__(self, config):
+    def __init__(self, config, use_mmgp=False):
         self.config = config
         self.models = {}
         self.render = MeshRender(
             default_resolution=self.config.render_size,
             texture_size=self.config.texture_size)
 
-        self.load_models()
+        self.load_models(use_mmgp=use_mmgp)
 
-    def load_models(self):
-        torch.set_default_device("cpu")
+    def load_models(self, use_mmgp=False):
+        if use_mmgp:
+            torch.set_default_device("cpu")
         # empty cuda cache
-        torch.cuda.empty_cache()
+        # torch.cuda.empty_cache()
         # Load model
-        self.models['delight_model'] = Light_Shadow_Remover(self.config)
-        self.models['multiview_model'] = Multiview_Diffusion_Net(self.config)
+        self.models['delight_model'] = Light_Shadow_Remover(self.config, use_mmgp=use_mmgp)
+        self.models['multiview_model'] = Multiview_Diffusion_Net(self.config, use_mmgp=use_mmgp)
         self.models['upscaler_model'] = AuraSR.from_pretrained("fal/AuraSR-v2")
 
     def render_normal_multiview(self, camera_elevs, camera_azims, use_abs_coor=True):
