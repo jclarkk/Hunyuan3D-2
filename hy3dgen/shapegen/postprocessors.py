@@ -137,7 +137,7 @@ class FaceReducer:
     def __call__(
             self,
             mesh: Union[pymeshlab.MeshSet, trimesh.Trimesh, Latent2MeshOutput, str],
-            max_facenum: int = 50000,
+            max_facenum: int = 100000,
             im_remesh: bool = False
     ) -> Union[pymeshlab.MeshSet, trimesh.Trimesh]:
         target_vertex_count = int(max_facenum / 8)

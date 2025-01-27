@@ -50,7 +50,12 @@ class Hunyuan3DTexGenConfig:
 
         self.candidate_camera_azims = [0, 90, 180, 270, 0, 180]
         self.candidate_camera_elevs = [0, 0, 0, 0, 90, -90]
-        self.candidate_view_weights = [1, 0.1, 0.5, 0.1, 0.05, 0.05]
+        self.candidate_view_weights = [1, 0.1, 0.5, 0.1, 0.1, 0.1]
+
+        self.candidate_camera_azims_enhanced = [0, 90, 180, 270, 0, 180, 90, 270, 45, 135, 225, 310, 45, 135, 225, 310]
+        self.candidate_camera_elevs_enhanced = [0, 0, 0, 0, 90, -90, -45, -45, 15, 15, 15, 15, -15, -15, -15, -15]
+        self.candidate_view_weights_enhanced = [1, 0.1, 0.5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1,
+                                                0.1]
 
         self.render_size = 2048
         self.texture_size = 1024
@@ -189,7 +194,7 @@ class Hunyuan3DPaintPipeline:
         return new_image
 
     @torch.no_grad()
-    def __call__(self, mesh, image, texture_size=2048, upscale=False):
+    def __call__(self, mesh, image, texture_size=2048, upscale=False, enhance_texture_angles=False):
         self.render.set_default_texture_resolution(texture_size)
 
         if isinstance(image, str):
@@ -207,8 +212,14 @@ class Hunyuan3DPaintPipeline:
 
         self.render.load_mesh(mesh)
 
-        selected_camera_elevs, selected_camera_azims, selected_view_weights = \
-            self.config.candidate_camera_elevs, self.config.candidate_camera_azims, self.config.candidate_view_weights
+        if enhance_texture_angles:
+            selected_camera_elevs, selected_camera_azims, selected_view_weights = \
+                (self.config.candidate_camera_elevs_enhanced, self.config.candidate_camera_azims_enhanced,
+                 self.config.candidate_view_weights_enhanced)
+        else:
+            selected_camera_elevs, selected_camera_azims, selected_view_weights = \
+                (self.config.candidate_camera_elevs, self.config.candidate_camera_azims,
+                 self.config.candidate_view_weights)
 
         print('Rendering normal maps...')
         normal_maps = self.render_normal_multiview(
@@ -216,9 +227,21 @@ class Hunyuan3DPaintPipeline:
         position_maps = self.render_position_multiview(
             selected_camera_elevs, selected_camera_azims)
 
-        camera_info = [(((azim // 30) + 9) % 12) // {-20: 1, 0: 1, 20: 1, -90: 3, 90: 3}[
-            elev] + {-20: 0, 0: 12, 20: 24, -90: 36, 90: 40}[elev] for azim, elev in
-                       zip(selected_camera_azims, selected_camera_elevs)]
+        if enhance_texture_angles:
+            camera_info = [
+                (((azim // 30) + 9) % 12) // {
+                    -90: 3, -45: 3, -20: 1, -15: 1, 0: 1, 15: 1, 20: 1, 90: 3
+                }[elev] + {
+                    -90: 36, -45: 36, -20: 0, -15: 0, 0: 12, 15: 24, 20: 24, 90: 40
+                }[elev]
+                for azim, elev in
+                zip(self.config.candidate_camera_azims_enhanced, self.config.candidate_camera_elevs_enhanced)
+            ]
+        else:
+            camera_info = [(((azim // 30) + 9) % 12) // {-20: 1, 0: 1, 20: 1, -90: 3, 90: 3}[
+                elev] + {-20: 0, 0: 12, 20: 24, -90: 36, 90: 40}[elev] for azim, elev in
+                           zip(selected_camera_azims, selected_camera_elevs)]
+
         print('Generate multiviews...')
         multiviews = self.models['multiview_model'](image_prompt, normal_maps + position_maps, camera_info)
 
@@ -230,7 +253,11 @@ class Hunyuan3DPaintPipeline:
             for i in tqdm(range(len(multiviews)), desc="Processing multiviews"):
                 rgb_img = multiviews[i].convert("RGB")
 
-                upscaled_img = self.models['upscaler_model'].upscale_4x_overlapped(rgb_img, max_batch_size=16)
+                # Only enhance first 6 images, otherwise just resize.
+                if i < 6:
+                    upscaled_img = self.models['upscaler_model'].upscale_4x_overlapped(rgb_img, max_batch_size=16)
+                else:
+                    upscaled_img = rgb_img.resize((2048, 2048))
 
                 if texture_size == 4096:
                     upscaled_img.resize((4096, 4096))

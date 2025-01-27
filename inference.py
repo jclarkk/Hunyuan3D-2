@@ -12,6 +12,9 @@ from hy3dgen.texgen import Hunyuan3DPaintPipeline
 
 
 def run(args):
+    if args.face_count > 100000:
+        raise ValueError("Face count must be less than or equal to 100000")
+
     # Only one image supported right now
     image_path = args.image_paths[0]
 
@@ -54,15 +57,18 @@ def run(args):
                          generator=torch.manual_seed(args.seed))[0]
     mesh = FloaterRemover()(mesh)
     mesh = DegenerateFaceRemover()(mesh)
-    mesh = FaceReducer()(mesh, im_remesh=args.im_remesh)
+    mesh = FaceReducer()(mesh, max_facenum=args.face_count, im_remesh=args.im_remesh)
     t3 = time.time()
     print(f"Mesh generation took {t3 - t2:.2f} seconds")
 
     # Generate texture
-    t4 = time.time()
-    mesh = texture_pipeline(mesh, image=image_path, texture_size=args.texture_size)
-    t5 = time.time()
-    print(f"Texture generation took {t5 - t4:.2f} seconds")
+    if args.texture:
+        t4 = time.time()
+        mesh = texture_pipeline(mesh, image=image_path, texture_size=args.texture_size)
+        t5 = time.time()
+        print(f"Texture generation took {t5 - t4:.2f} seconds")
+    else:
+        t5 = t3
 
     os.makedirs(args.output_dir, exist_ok=True)
 
@@ -87,6 +93,8 @@ if __name__ == "__main__":
     parser.add_argument('--texture_size', type=int, default=2048,
                         help='Resolution size of the texture used for the GLB')
     parser.add_argument('--im_remesh', action='store_true', help='Remesh using InstantMeshes', default=False)
+    parser.add_argument('--face_count', type=int, default=100000, help='Maximum face count for the mesh')
+    parser.add_argument('--texture', action='store_true', help='Texture the mesh', default=False)
     parser.add_argument('--profile', type=int, default=1)
     parser.add_argument('--verbose', type=int, default=1)
 

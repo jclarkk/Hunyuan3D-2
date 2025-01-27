@@ -69,7 +69,13 @@ def run(args):
 
     # Generate texture
     t4 = time.time()
-    mesh = texture_pipeline(mesh, image=image, texture_size=args.texture_size, upscale=args.upscale)
+    mesh = texture_pipeline(
+        mesh,
+        image=image,
+        texture_size=args.texture_size,
+        upscale=args.upscale,
+        enhance_texture_angles=True
+    )
     t5 = time.time()
     print(f"Texture generation took {t5 - t4:.2f} seconds")
 

@@ -28,7 +28,7 @@ import random
 import numpy as np
 import torch
 from diffusers import DiffusionPipeline
-from diffusers import DDIMScheduler
+from diffusers import EulerAncestralDiscreteScheduler
 
 
 class Multiview_Diffusion_Net():
@@ -44,7 +44,7 @@ class Multiview_Diffusion_Net():
             multiview_ckpt_path,
             custom_pipeline=custom_pipeline_path, torch_dtype=torch.float16)
 
-        pipeline.scheduler = DDIMScheduler.from_config(pipeline.scheduler.config,
+        pipeline.scheduler = EulerAncestralDiscreteScheduler.from_config(pipeline.scheduler.config,
                                                                          timestep_spacing='trailing')
 
         pipeline.set_progress_bar_config(disable=True)
