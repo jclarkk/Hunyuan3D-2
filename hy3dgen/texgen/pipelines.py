@@ -111,8 +111,9 @@ class Hunyuan3DPaintPipeline:
         # torch.cuda.empty_cache()
         # Load model
         self.models['delight_model'] = Light_Shadow_Remover(self.config, use_mmgp=use_mmgp)
+        print('Delight model loaded')
         self.models['multiview_model'] = Multiview_Diffusion_Net(self.config, use_mmgp=use_mmgp)
-        self.models['upscaler_model'] = AuraSR.from_pretrained("fal/AuraSR-v2")
+        print('Multiview model loaded')
 
     def render_normal_multiview(self, camera_elevs, camera_azims, use_abs_coor=True):
         normal_maps = []
@@ -210,6 +211,8 @@ class Hunyuan3DPaintPipeline:
         print('Removing light and shadow...')
         image_prompt = self.models['delight_model'](image_prompt)
 
+        del self.models['delight_model']
+
         print('Wrapping UV...')
         mesh = mesh_uv_wrap(mesh)
 
@@ -248,7 +251,12 @@ class Hunyuan3DPaintPipeline:
         print('Generate multiviews...')
         multiviews = self.models['multiview_model'](image_prompt, normal_maps + position_maps, camera_info)
 
+        del self.models['multiview_model']
+
         if upscale:
+            self.models['upscaler_model'] = AuraSR.from_pretrained("fal/AuraSR-v2")
+            print('Upscaler model loaded')
+
             # Multi view images are 512x512 so we will use AuraSR-v2 to upscale them to 2048x2048
             new_multiviews = []
 

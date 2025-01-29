@@ -37,12 +37,7 @@ def run(args):
         mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained('tencent/Hunyuan3D-2', use_safetensors=True)
     print('3D DiT pipeline loaded')
 
-    if args.texture:
-        texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2', use_mmgp=args.mmgp)
-        print('3D Paint pipeline loaded')
-    else:
-        texture_pipeline = None
-
+    texture_pipeline = None
     # Handle MMGP offloading
     if args.mmgp:
         profile = args.mmgp_profile
@@ -51,6 +46,9 @@ def run(args):
         pipe = offload.extract_models("i23d_worker", mesh_pipeline)
 
         if args.texture:
+            texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2', use_mmgp=args.mmgp)
+            print('3D Paint pipeline loaded')
+
             pipe.update(offload.extract_models("texgen_worker", texture_pipeline))
             texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
 
@@ -73,8 +71,15 @@ def run(args):
 
     # Generate texture
     if args.texture:
+        if not args.mmgp:
+            del mesh_pipeline
+            torch.cuda.empty_cache()
+
+            texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2')
+            print('3D Paint pipeline loaded')
+
         t4 = time.time()
-        mesh = texture_pipeline(mesh, image=image_path, texture_size=args.texture_size)
+        mesh = texture_pipeline(mesh, image=image, texture_size=args.texture_size)
         t5 = time.time()
         print(f"Texture generation took {t5 - t4:.2f} seconds")
     else:
