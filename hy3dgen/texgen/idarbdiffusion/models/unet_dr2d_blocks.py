@@ -20,7 +20,7 @@ from torch import nn
 
 from diffusers.utils import is_torch_version, logging
 from diffusers.models.resnet import Downsample2D, ResnetBlock2D, Upsample2D
-from idarbdiffusion.models.transformer_dr2d import TransformerDR2DModel
+from .transformer_dr2d import TransformerDR2DModel
 
 from diffusers.models.unets.unet_2d_blocks import DownBlock2D, ResnetDownsampleBlock2D, AttnDownBlock2D, CrossAttnDownBlock2D, SimpleCrossAttnDownBlock2D, SkipDownBlock2D, AttnSkipDownBlock2D, DownEncoderBlock2D, AttnDownEncoderBlock2D, KDownBlock2D, KCrossAttnDownBlock2D
 from diffusers.models.unets.unet_2d_blocks import UpBlock2D, ResnetUpsampleBlock2D, CrossAttnUpBlock2D, SimpleCrossAttnUpBlock2D, AttnUpBlock2D, SkipUpBlock2D, AttnSkipUpBlock2D, UpDecoderBlock2D, AttnUpDecoderBlock2D, KUpBlock2D, KCrossAttnUpBlock2D

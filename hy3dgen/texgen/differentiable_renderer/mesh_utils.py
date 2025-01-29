@@ -39,14 +39,14 @@ def load_mesh(mesh):
     return vtx_pos, pos_idx, vtx_uv, uv_idx, texture_data
 
 
-def save_mesh(mesh, texture_data, normal_map=None, metalness_roughness_map=None):
+def save_mesh(mesh, texture_data, normal_texture=None, metalness_roughness_texture=None):
     material = trimesh.visual.texture.SimpleMaterial(image=texture_data, diffuse=(255, 255, 255))
-    if normal_map is not None and metalness_roughness_map is not None:
+    if normal_texture is not None and metalness_roughness_texture is not None:
         material = trimesh.visual.material.PBRMaterial(
             baseColorTexture=texture_data,
-            baseColorFactor=np.array([255, 255, 255, 255], dtype=np.uint8),
-            normalTexture=normal_map,
-            metallicRoughnessTexture=metalness_roughness_map
+            normalTexture=normal_texture,
+            metallicRoughnessTexture=metalness_roughness_texture,
+            baseColorFactor=[1.0, 1.0, 1.0, 1.0],  # Ensure brightness is not altered
         )
         mesh.visual = trimesh.visual.TextureVisuals(uv=mesh.visual.uv, material=material)
     else:

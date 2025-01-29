@@ -56,7 +56,7 @@ from diffusers.utils import (
     logging,
 )
 from diffusers import __version__
-from idarbdiffusion.models.unet_dr2d_blocks import (
+from .unet_dr2d_blocks import (
     CrossAttnDownBlockDR2D,
     CrossAttnUpBlockDR2D,
     UNetMidBlockDR2DCrossAttn,

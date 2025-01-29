@@ -2,23 +2,13 @@
 # and Other Licenses of the Third-Party Components therein:
 # The below Model in this distribution may have been modified by THL A29 Limited
 # ("Tencent Modifications"). All Tencent Modifications are Copyright (C) 2024 THL A29 Limited.
-import logging
-import numpy as np
-import os
-import torch
-from PIL import Image
-from aura_sr import AuraSR
-from typing import List
-
-from .differentiable_renderer.mesh_render import MeshRender
-from .utils.dehighlight_utils import Light_Shadow_Remover
-from .utils.multiview_utils import Multiview_Diffusion_Net
-from .utils.uv_warp_utils import mesh_uv_wrap
+import sys
 
 # Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
 # The below software and/or models in this distribution may have been
 # modified by THL A29 Limited ("Tencent Modifications").
 # All Tencent Modifications are Copyright (C) THL A29 Limited.
+
 # Hunyuan 3D is licensed under the TENCENT HUNYUAN NON-COMMERCIAL LICENSE AGREEMENT
 # except for the third-party components listed below.
 # Hunyuan 3D does not impose any additional limitations beyond what is outlined
@@ -26,25 +16,46 @@ from .utils.uv_warp_utils import mesh_uv_wrap
 # Users must comply with all terms and conditions of original licenses of these third-party
 # components and must ensure that the usage of the third party components adheres to
 # all relevant laws and regulations.
+
 # For avoidance of doubts, Hunyuan 3D means the large language models and
 # their software and algorithms, including trained model weights, parameters (including
 # optimizer states), machine-learning model code, inference-enabling code, training-enabling code,
 # fine-tuning enabling code and other elements of the foregoing made publicly available
 # by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
 
+
+import logging
+import os
+
+import numpy as np
+import torch
+from PIL import Image
+
+from aura_sr import AuraSR
+
+from .differentiable_renderer.mesh_render import MeshRender
+from .utils.dehighlight_utils import Light_Shadow_Remover
+from .utils.multiview_utils import Multiview_Diffusion_Net
+from .utils.uv_warp_utils import mesh_uv_wrap
+
 logger = logging.getLogger(__name__)
 
 
 class Hunyuan3DTexGenConfig:
 
-    def __init__(self, light_remover_ckpt_path, multiview_ckpt_path):
-        self.device = 'cuda'
+    def __init__(self, light_remover_ckpt_path, multiview_ckpt_path, use_mmgp=False):
+        self.device = 'cpu' if use_mmgp else 'cuda'
         self.light_remover_ckpt_path = light_remover_ckpt_path
         self.multiview_ckpt_path = multiview_ckpt_path
 
         self.candidate_camera_azims = [0, 90, 180, 270, 0, 180]
         self.candidate_camera_elevs = [0, 0, 0, 0, 90, -90]
-        self.candidate_view_weights = [1, 0.1, 0.5, 0.1, 0.05, 0.05]
+        self.candidate_view_weights = [1, 0.1, 0.5, 0.1, 0.1, 0.1]
+
+        self.candidate_camera_azims_enhanced = [0, 90, 180, 270, 0, 180, 90, 270, 45, 135, 225, 310, 45, 135, 225, 310]
+        self.candidate_camera_elevs_enhanced = [0, 0, 0, 0, 90, -90, -45, -45, 15, 15, 15, 15, -15, -15, -15, -15]
+        self.candidate_view_weights_enhanced = [1, 0.1, 0.5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1,
+                                                0.1]
 
         self.render_size = 2048
         self.texture_size = 1024
@@ -54,7 +65,7 @@ class Hunyuan3DTexGenConfig:
 
 class Hunyuan3DPaintPipeline:
     @classmethod
-    def from_pretrained(cls, model_path):
+    def from_pretrained(cls, model_path, use_mmgp=False):
         original_model_path = model_path
         if not os.path.exists(model_path):
             # try local path
@@ -71,32 +82,38 @@ class Hunyuan3DPaintPipeline:
                     model_path = huggingface_hub.snapshot_download(repo_id=original_model_path)
                     delight_model_path = os.path.join(model_path, 'hunyuan3d-delight-v2-0')
                     multiview_model_path = os.path.join(model_path, 'hunyuan3d-paint-v2-0')
-                    return cls(Hunyuan3DTexGenConfig(delight_model_path, multiview_model_path))
+                    return cls(Hunyuan3DTexGenConfig(delight_model_path, multiview_model_path, use_mmgp=use_mmgp),
+                               use_mmgp=use_mmgp)
                 except ImportError:
                     logger.warning(
                         "You need to install HuggingFace Hub to load models from the hub."
                     )
                     raise RuntimeError(f"Model path {model_path} not found")
             else:
-                return cls(Hunyuan3DTexGenConfig(delight_model_path, multiview_model_path))
+                return cls(Hunyuan3DTexGenConfig(delight_model_path, multiview_model_path, use_mmgp=use_mmgp),
+                           use_mmgp=use_mmgp)
 
         raise FileNotFoundError(f"Model path {original_model_path} not found and we could not find it at huggingface")
 
-    def __init__(self, config):
+    def __init__(self, config, use_mmgp=False):
         self.config = config
         self.models = {}
         self.render = MeshRender(
             default_resolution=self.config.render_size,
             texture_size=self.config.texture_size)
 
-        self.load_models()
+        self.load_models(use_mmgp=use_mmgp)
 
-    def load_models(self):
-        # empty cude cache
-        torch.cuda.empty_cache()
+    def load_models(self, use_mmgp=False):
+        if use_mmgp:
+            torch.set_default_device("cpu")
+        # empty cuda cache
+        # torch.cuda.empty_cache()
         # Load model
-        self.models['delight_model'] = Light_Shadow_Remover(self.config)
-        self.models['multiview_model'] = Multiview_Diffusion_Net(self.config)
+        self.models['delight_model'] = Light_Shadow_Remover(self.config, use_mmgp=use_mmgp)
+        print('Delight model loaded')
+        self.models['multiview_model'] = Multiview_Diffusion_Net(self.config, use_mmgp=use_mmgp)
+        print('Multiview model loaded')
 
     def render_normal_multiview(self, camera_elevs, camera_azims, use_abs_coor=True):
         normal_maps = []
@@ -133,8 +150,8 @@ class Hunyuan3DPaintPipeline:
             texture, ori_trust_map = self.render.fast_bake_texture(
                 project_textures, project_weighted_cos_maps)
 
-            final_texture_linear_torch = torch.tensor(texture).float()
-            texture = self.render.color_rgb_to_srgb(final_texture_linear_torch)
+            texture = texture.clone().detach().float()
+            texture = self.render.color_rgb_to_srgb(texture)
         else:
             raise f'no method {method}'
         return texture, ori_trust_map > 1E-8
@@ -146,8 +163,42 @@ class Hunyuan3DPaintPipeline:
 
         return texture
 
+    def recenter_image(self, image, border_ratio=0.2):
+        if image.mode == 'RGB':
+            return image
+        elif image.mode == 'L':
+            image = image.convert('RGB')
+            return image
+
+        alpha_channel = np.array(image)[:, :, 3]
+        non_zero_indices = np.argwhere(alpha_channel > 0)
+        if non_zero_indices.size == 0:
+            raise ValueError("Image is fully transparent")
+
+        min_row, min_col = non_zero_indices.min(axis=0)
+        max_row, max_col = non_zero_indices.max(axis=0)
+
+        cropped_image = image.crop((min_col, min_row, max_col + 1, max_row + 1))
+
+        width, height = cropped_image.size
+        border_width = int(width * border_ratio)
+        border_height = int(height * border_ratio)
+
+        new_width = width + 2 * border_width
+        new_height = height + 2 * border_height
+
+        square_size = max(new_width, new_height)
+
+        new_image = Image.new('RGBA', (square_size, square_size), (255, 255, 255, 0))
+
+        paste_x = (square_size - new_width) // 2 + border_width
+        paste_y = (square_size - new_height) // 2 + border_height
+
+        new_image.paste(cropped_image, (paste_x, paste_y))
+        return new_image
+
     @torch.no_grad()
-    def __call__(self, mesh, image, texture_size=2048, upscale=False, pbr=False):
+    def __call__(self, mesh, image, texture_size=2048, upscale=False, pbr=False, enhance_texture_angles=False):
         self.render.set_default_texture_resolution(texture_size)
 
         if isinstance(image, str):
@@ -155,69 +206,114 @@ class Hunyuan3DPaintPipeline:
         else:
             image_prompt = image
 
+        image_prompt = self.recenter_image(image_prompt)
+
+        print('Removing light and shadow...')
         image_prompt = self.models['delight_model'](image_prompt)
 
+        del self.models['delight_model']
+
+        print('Wrapping UV...')
         mesh = mesh_uv_wrap(mesh)
 
         self.render.load_mesh(mesh)
 
-        selected_camera_elevs, selected_camera_azims, selected_view_weights = \
-            self.config.candidate_camera_elevs, self.config.candidate_camera_azims, self.config.candidate_view_weights
+        if enhance_texture_angles:
+            selected_camera_elevs, selected_camera_azims, selected_view_weights = \
+                (self.config.candidate_camera_elevs_enhanced, self.config.candidate_camera_azims_enhanced,
+                 self.config.candidate_view_weights_enhanced)
+        else:
+            selected_camera_elevs, selected_camera_azims, selected_view_weights = \
+                (self.config.candidate_camera_elevs, self.config.candidate_camera_azims,
+                 self.config.candidate_view_weights)
 
+        print('Rendering normal maps...')
         normal_maps = self.render_normal_multiview(
             selected_camera_elevs, selected_camera_azims, use_abs_coor=True)
         position_maps = self.render_position_multiview(
             selected_camera_elevs, selected_camera_azims)
 
-        camera_info = [(((azim // 30) + 9) % 12) // {-20: 1, 0: 1, 20: 1, -90: 3, 90: 3}[
-            elev] + {-20: 0, 0: 12, 20: 24, -90: 36, 90: 40}[elev] for azim, elev in
-                       zip(selected_camera_azims, selected_camera_elevs)]
+        if enhance_texture_angles:
+            camera_info = [
+                (((azim // 30) + 9) % 12) // {
+                    -90: 3, -45: 3, -20: 1, -15: 1, 0: 1, 15: 1, 20: 1, 90: 3
+                }[elev] + {
+                    -90: 36, -45: 36, -20: 0, -15: 0, 0: 12, 15: 24, 20: 24, 90: 40
+                }[elev]
+                for azim, elev in
+                zip(self.config.candidate_camera_azims_enhanced, self.config.candidate_camera_elevs_enhanced)
+            ]
+        else:
+            camera_info = [(((azim // 30) + 9) % 12) // {-20: 1, 0: 1, 20: 1, -90: 3, 90: 3}[
+                elev] + {-20: 0, 0: 12, 20: 24, -90: 36, 90: 40}[elev] for azim, elev in
+                           zip(selected_camera_azims, selected_camera_elevs)]
+
+        print('Generate multiviews...')
         multiviews = self.models['multiview_model'](image_prompt, normal_maps + position_maps, camera_info)
 
-        if upscale:
-            if texture_size == 4096:
-                # Resize multiviews to 1024x1024 first
-                for i in range(len(multiviews)):
-                    multiviews[i] = multiviews[i].resize((1024, 1024))
+        del self.models['multiview_model']
 
-            # Multi view images are 512x512 so we will use Real-ESRGAN to upscale them to 2048x2048
+        if upscale:
+            self.models['upscaler_model'] = AuraSR.from_pretrained("fal/AuraSR-v2")
+            print('Upscaler model loaded')
+
+            # Multi view images are 512x512 so we will use AuraSR-v2 to upscale them to 2048x2048
             new_multiviews = []
 
-            upscaler = load_upscaler()
-            for i in range(len(multiviews)):
+            from tqdm import tqdm
+            for i in tqdm(range(len(multiviews)), desc="Processing multiviews"):
                 rgb_img = multiviews[i].convert("RGB")
-                upscaled_img = upscaler.upscale_4x(rgb_img)
+
+                # Only enhance first 6 images, otherwise just resize.
+                if i < 6:
+                    with torch.autocast("cuda", dtype=torch.float16):
+                        upscaled_img = self.models['upscaler_model'].upscale_4x_overlapped(rgb_img, max_batch_size=16)
+                else:
+                    upscaled_img = rgb_img.resize((2048, 2048))
+
+                if texture_size == 4096:
+                    upscaled_img.resize((4096, 4096))
+
                 new_multiviews.append(upscaled_img)
 
             multiviews = new_multiviews
+
+            print('Finished processing multiviews')
         else:
             for i in range(len(multiviews)):
                 multiviews[i] = multiviews[i].resize(
                     (self.config.render_size, self.config.render_size))
-
-        texture, mask = self.bake_from_multiview(multiviews,
-                                                 selected_camera_elevs, selected_camera_azims, selected_view_weights,
-                                                 method=self.config.merge_method)
-
-        mask_np = (mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
+                multiviews[i].save(f"multiview_{i}.png")
 
         normal_map = None
         metalness_roughness_map = None
 
         if pbr:
-            pbr_pipeline = IDArbPipeline()
-            pbr_images = pbr_pipeline.run(multiviews)
+            from .idarbdiffusion.pipeline import IDArbPipeline
 
+            # Ensure multiviews are RGBA
+            multiviews = [img.convert("RGBA") for img in multiviews]
+
+            print('Creating PBR maps...')
+            pbr_pipeline = IDArbPipeline.from_pretrained(self.config.device)
+            pbr_images = pbr_pipeline(multiviews)
+
+            diffusion_maps = []
             normal_maps = []
             roughness_maps = []
             metalness_maps = []
 
             for pbr_image_maps in pbr_images:
+                diffusion_maps.append(pbr_image_maps['albedo'])
                 normal_maps.append(pbr_image_maps['normal'])
                 roughness_maps.append(pbr_image_maps['roughness'])
                 metalness_maps.append(pbr_image_maps['metalness'])
 
-            # Bake PBR into UV space
+            print('Baking PBR textures...')
+            texture, mask = self.bake_from_multiview(diffusion_maps,
+                                                     selected_camera_elevs, selected_camera_azims,
+                                                     selected_view_weights,
+                                                     method=self.config.merge_method)
             normal_map, normal_mask = self.bake_from_multiview(
                 normal_maps,
                 selected_camera_elevs,
@@ -225,8 +321,6 @@ class Hunyuan3DPaintPipeline:
                 selected_view_weights,
                 method=self.config.merge_method
             )
-
-            # 3. Generate roughness_map_views
             roughness_map, roughness_mask = self.bake_from_multiview(
                 roughness_maps,
                 selected_camera_elevs,
@@ -234,8 +328,6 @@ class Hunyuan3DPaintPipeline:
                 selected_view_weights,
                 method=self.config.merge_method
             )
-
-            # 4. Generate metalness_map_views
             metalness_map, metalness_mask = self.bake_from_multiview(
                 metalness_maps,
                 selected_camera_elevs,
@@ -244,8 +336,23 @@ class Hunyuan3DPaintPipeline:
                 method=self.config.merge_method
             )
 
-            metalness_roughness_map = self.combine_roughness_metalness(np.asarray(roughness_map), np.asarray(metalness_map))
+            metalness_roughness_map = pbr_pipeline.combine_roughness_metalness(
+                np.asarray(roughness_map),
+                np.asarray(metalness_map)
+            )
 
+            texture = texture.cpu()
+            normal_map = normal_map.cpu()
+        else:
+            print('Baking texture...')
+            texture, mask = self.bake_from_multiview(multiviews,
+                                                     selected_camera_elevs, selected_camera_azims,
+                                                     selected_view_weights,
+                                                     method=self.config.merge_method)
+
+        mask_np = (mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
+
+        print('Inpainting texture...')
         texture = self.texture_inpaint(texture, mask_np)
 
         self.render.set_texture(texture)
@@ -253,133 +360,7 @@ class Hunyuan3DPaintPipeline:
 
         return textured_mesh
 
-    @staticmethod
-    def combine_roughness_metalness(roughness_map: np.ndarray, metalness_map: np.ndarray) -> Image.Image:
-        """
-        roughness_map: HxW or HxWx1, values in [0..1]
-        metalness_map: HxW or HxWx1, values in [0..1]
-
-        Returns: PIL Image (RGB),
-                 R = roughness, G = metalness, B = 0
-        """
-
-        # Ensure both are HxW and float [0..1]
-        if roughness_map.ndim == 3 and roughness_map.shape[2] == 3:
-            # Possibly the roughness is already 3-channel? Just pick one.
-            roughness_map = roughness_map[..., 0]
-        if metalness_map.ndim == 3 and metalness_map.shape[2] == 3:
-            metalness_map = metalness_map[..., 0]
-
-        # Convert from [0..1] float -> [0..255] uint8
-        roughness_8 = (roughness_map * 255).astype(np.uint8)
-        metalness_8 = (metalness_map * 255).astype(np.uint8)
-
-        # Make sure dimensions match
-        if roughness_8.shape != metalness_8.shape:
-            raise ValueError("Roughness and metalness maps must have the same shape.")
-
-        # Stack into a 3-channel array: (H, W, 3)
-        # R=roughness, G=metalness, B=0  (you could also do B=255 or a third channel if needed)
-        height, width = roughness_8.shape
-        blue_channel = np.zeros((height, width), dtype=np.uint8)  # or np.full((height,width), 255, dtype=np.uint8)
-
-        combined_map = np.stack([roughness_8, metalness_8, blue_channel], axis=-1)
-
-        # Convert to a PIL image in RGB mode
-        combined_pil = Image.fromarray(combined_map, mode='RGB')
-        return combined_pil
-
 
 def load_upscaler():
     upscaler = AuraSR.from_pretrained()
     return upscaler
-
-
-class IDArbPipeline:
-
-    @staticmethod
-    def load_pipeline():
-        from transformers import CLIPTextModel, CLIPTokenizer, CLIPImageProcessor
-        from diffusers import AutoencoderKL, DDIMScheduler
-        from idarbdiffusion.models.unet_dr2d_condition import UNetDR2DConditionModel
-        from idarbdiffusion.pipelines.pipeline_idarbdiffusion import IDArbDiffusionPipeline
-
-        """
-        load pipeline from hub
-        or load from local ckpts: pipeline = IDArbDiffusionPipeline.from_pretrained("./pipeckpts")
-        """
-        text_encoder = CLIPTextModel.from_pretrained("lizb6626/IDArb", subfolder="text_encoder")
-        tokenizer = CLIPTokenizer.from_pretrained("lizb6626/IDArb", subfolder="tokenizer")
-        feature_extractor = CLIPImageProcessor.from_pretrained("lizb6626/IDArb", subfolder="feature_extractor")
-        vae = AutoencoderKL.from_pretrained("lizb6626/IDArb", subfolder="vae")
-        scheduler = DDIMScheduler.from_pretrained("lizb6626/IDArb", subfolder="scheduler")
-        unet = UNetDR2DConditionModel.from_pretrained("lizb6626/IDArb", subfolder="unet")
-        pipeline = IDArbDiffusionPipeline(
-            text_encoder=text_encoder,
-            tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
-            vae=vae,
-            unet=unet,
-            safety_checker=None,
-            scheduler=scheduler,
-        )
-        return pipeline
-
-    def run(self, images: List[Image.Image]):
-        pipeline = self.load_pipeline()
-
-        from idarbdiffusion.data.custom_mv_dataset import CustomMVDataset
-        from diffusers.utils.import_utils import is_xformers_available
-        from packaging import version
-
-        if is_xformers_available():
-            import xformers
-            xformers_version = version.parse(xformers.__version__)
-            pipeline.unet.enable_xformers_memory_efficient_attention()
-            print(f'Use xformers version: {xformers_version}')
-
-        weight_dtype = torch.float16
-
-        dataset = CustomMVDataset(images, num_views=len(images))
-
-        dataloader = torch.utils.data.DataLoader(dataset, batch_size=1, shuffle=False)
-
-        Nd = 3
-
-        pbr_images = []
-        for i, batch in enumerate(dataloader):
-
-            imgs_in, imgs_mask, task_ids = batch['imgs_in'], batch['imgs_mask'], batch['task_ids']
-            cam_pose = batch['pose']
-            imgs_name = batch['data_name']
-
-            imgs_in = imgs_in.to(weight_dtype).to("cuda")
-            cam_pose = cam_pose.to(weight_dtype).to("cuda")
-
-            B, Nv, _, H, W = imgs_in.shape
-
-            imgs_in, imgs_mask, task_ids = imgs_in.flatten(0, 1), imgs_mask.flatten(0, 1), task_ids.flatten(0, 2)
-
-            with torch.autocast("cuda"):
-                out = pipeline(
-                    imgs_in,
-                    task_ids,
-                    num_views=Nv,
-                    cam_pose=cam_pose,
-                    height=H, width=W,
-                    # generator=generator,
-                    guidance_scale=1.0,
-                    output_type='pt',
-                    num_images_per_prompt=1,
-                    eta=1.0,
-                ).images
-
-                out = out.view(B, Nv, Nd, *out.shape[1:])
-                out = out.detach().cpu().numpy()
-
-                current_image_maps = {}
-                for i in range(B):
-                    current_image_maps[imgs_name[i]] = out[i]
-                pbr_images.append(current_image_maps)
-
-        return pbr_images

@@ -39,8 +39,8 @@ def preprocess_image(input: Image.Image) -> Image.Image:
         pred_pil = transforms.ToPILImage()(pred)
         mask = pred_pil.resize(input.size)
         input.putalpha(mask)
-        torch.cuda.empty_cache()
         del model
+        torch.cuda.empty_cache()
     output = input
     # Crop and resize based on alpha channel after background removal
     output_np = np.array(output)
