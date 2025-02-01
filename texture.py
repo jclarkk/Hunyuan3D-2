@@ -17,8 +17,8 @@ def run(args):
     if args.prompt is not None and args.image_paths is not None:
         raise ValueError("Please provide either a prompt or an image, not both")
 
-    if args.texture_size not in [2048, 4096]:
-        raise ValueError("Texture size must either be 2k or 4k")
+    if args.texture_size not in [1024, 2048, 4096]:
+        raise ValueError("Texture size must either be 1k, 2k or 4k")
 
     t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled')
     texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2')
