@@ -198,7 +198,7 @@ class Hunyuan3DPaintPipeline:
         return new_image
 
     @torch.no_grad()
-    def __call__(self, mesh, image, texture_size=2048, upscale=False, enhance_texture_angles=False):
+    def __call__(self, mesh, image, texture_size=2048, upscale=False, enhance_texture_angles=False, diffusion_sr=False):
         self.render.set_default_texture_resolution(texture_size)
 
         if isinstance(image, str):
@@ -252,8 +252,37 @@ class Hunyuan3DPaintPipeline:
         multiviews = self.models['multiview_model'](image_prompt, normal_maps + position_maps, camera_info)
 
         del self.models['multiview_model']
+        torch.cuda.empty_cache()
 
-        if upscale:
+        if upscale and diffusion_sr:
+            from .InvSR.sampler_invsr import process_image, pil_to_tensor
+
+            sampler = load_diffusion_sr()
+            print('Diffusion SR model loaded')
+
+            new_multiviews = []
+
+            from tqdm import tqdm
+            for i in tqdm(range(len(multiviews)), desc="Processing multiviews"):
+                rgb_img = multiviews[i].convert("RGB")
+
+                img_tensor = pil_to_tensor(rgb_img)
+
+                if i < 6:
+                    upscaled_img = process_image(sampler, img_tensor)
+                else:
+                    upscaled_img = rgb_img.resize((2048, 2048))
+
+                if texture_size == 4096:
+                    upscaled_img.resize((4096, 4096))
+
+                new_multiviews.append(upscaled_img)
+
+            del sampler
+            torch.cuda.empty_cache()
+
+            multiviews = new_multiviews
+        elif upscale:
             self.models['upscaler_model'] = AuraSR.from_pretrained("fal/AuraSR-v2")
             print('Upscaler model loaded')
 
@@ -277,6 +306,9 @@ class Hunyuan3DPaintPipeline:
 
             multiviews = new_multiviews
 
+            del self.models['upscaler_model']
+            torch.cuda.empty_cache()
+
             print('Finished processing multiviews')
         else:
             for i in range(len(multiviews)):
@@ -297,3 +329,16 @@ class Hunyuan3DPaintPipeline:
         textured_mesh = self.render.save_mesh()
 
         return textured_mesh
+
+
+def load_diffusion_sr():
+    from omegaconf import OmegaConf
+    from .InvSR.sampler_invsr import InvSamplerSR
+    from .InvSR.utils import model_utils
+    # Load config
+    config_path = './hy3dgen/texgen/InvSR/configs/sample-sd-turbo.yaml'
+    config = OmegaConf.load(config_path)
+    # Load model
+    model_utils.load_model(config)
+    # Load sampler
+    return InvSamplerSR(config)

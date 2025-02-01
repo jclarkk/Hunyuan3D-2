@@ -75,7 +75,8 @@ def run(args):
         image=image,
         texture_size=args.texture_size,
         upscale=args.upscale,
-        enhance_texture_angles=args.enhance_texture_angles
+        enhance_texture_angles=args.enhance_texture_angles,
+        diffusion_sr=args.diffusion_sr
     )
     t5 = time.time()
     print(f"Texture generation took {t5 - t4:.2f} seconds")
@@ -103,6 +104,7 @@ if __name__ == "__main__":
     parser.add_argument('--texture_size', type=int, default=2048,
                         help='Resolution size of the texture used for the GLB')
     parser.add_argument('--upscale', action='store_true', help='Upscale the texture', default=False)
+    parser.add_argument('--diffusion_sr', action='store_true', help='Use diffusion Super-Resolution', default=False)
     parser.add_argument('--enhance_texture_angles', action='store_true', help='Enhance texture angles', default=False)
     parser.add_argument('--mmgp', action='store_true', default=False, help='Use MMGP offloading')
     parser.add_argument('--mmgp_profile', type=int, default=1)

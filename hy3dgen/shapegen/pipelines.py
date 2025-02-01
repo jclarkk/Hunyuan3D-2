@@ -160,7 +160,7 @@ class Hunyuan3DDiTPipeline:
         if use_safetensors:
             # parse safetensors
             import safetensors.torch
-            safetensors_ckpt = safetensors.torch.load_file(ckpt_path, device='cpu', weights_only=True)
+            safetensors_ckpt = safetensors.torch.load_file(ckpt_path, device='cpu')
             ckpt = {}
             for key, value in safetensors_ckpt.items():
                 model_name = key.split('.')[0]
