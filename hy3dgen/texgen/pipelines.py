@@ -262,17 +262,13 @@ class Hunyuan3DPaintPipeline:
             for i in tqdm(range(len(multiviews)), desc="Processing multiviews"):
                 rgb_img = multiviews[i].convert("RGB")
 
-                img_tensor = pil_to_tensor(rgb_img)
-
                 if i < 6:
-                    upscaled_img = process_image(sampler, img_tensor)
-                else:
-                    upscaled_img = rgb_img.resize((2048, 2048))
+                    img_tensor = pil_to_tensor(rgb_img)
+                    rgb_img = process_image(sampler, img_tensor)
 
-                if texture_size == 4096:
-                    upscaled_img.resize((4096, 4096))
+                rgb_img.resize((texture_size, texture_size))
 
-                new_multiviews.append(upscaled_img)
+                new_multiviews.append(rgb_img)
 
             del sampler
             torch.cuda.empty_cache()
@@ -291,14 +287,11 @@ class Hunyuan3DPaintPipeline:
 
                 # Only enhance first 6 images, otherwise just resize.
                 if i < 6:
-                    upscaled_img = self.models['upscaler_model'].upscale_4x_overlapped(rgb_img, max_batch_size=16)
-                else:
-                    upscaled_img = rgb_img.resize((2048, 2048))
+                    rgb_img = self.models['upscaler_model'].upscale_4x_overlapped(rgb_img, max_batch_size=16)
 
-                if texture_size == 4096:
-                    upscaled_img.resize((4096, 4096))
+                rgb_img.resize((texture_size, texture_size))
 
-                new_multiviews.append(upscaled_img)
+                new_multiviews.append(rgb_img)
 
             multiviews = new_multiviews
 
