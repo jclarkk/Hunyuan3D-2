@@ -48,7 +48,6 @@ class Multiview_Diffusion_Net():
                                                                          timestep_spacing='trailing')
 
         pipeline.set_progress_bar_config(disable=True)
-
         self.pipeline = pipeline.to(self.device)
 
     def seed_everything(self, seed):
