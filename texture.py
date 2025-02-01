@@ -1,9 +1,7 @@
 import argparse
 import os
 import time
-import torch.cuda
 import trimesh
-from mmgp import offload
 from PIL import Image
 
 from hy3dgen.rmbg import preprocess_image
@@ -22,22 +20,8 @@ def run(args):
     if args.texture_size not in [2048, 4096]:
         raise ValueError("Texture size must either be 2k or 4k")
 
-    t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled', use_mmgp=args.mmgp)
-    texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2', use_mmgp=args.mmgp)
-
-    if args.mmgp:
-        # Handle MMGP offloading
-        profile = args.mmgp_profile
-        kwargs = {}
-
-        pipe = offload.extract_models("t2i_worker", t2i_pipeline)
-        pipe.update(offload.extract_models("texgen_worker", texture_pipeline))
-        texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
-
-        if profile != 1 and profile != 3:
-            kwargs["budgets"] = {"*": 2200}
-
-        offload.profile(pipe, profile_no=profile, verboseLevel=args.mmgp_verbose, **kwargs)
+    t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled')
+    texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2')
 
     if args.prompt is not None:
         t0 = time.time()
@@ -106,9 +90,6 @@ if __name__ == "__main__":
     parser.add_argument('--upscale', action='store_true', help='Upscale the texture', default=False)
     parser.add_argument('--diffusion_sr', action='store_true', help='Use diffusion Super-Resolution', default=False)
     parser.add_argument('--enhance_texture_angles', action='store_true', help='Enhance texture angles', default=False)
-    parser.add_argument('--mmgp', action='store_true', default=False, help='Use MMGP offloading')
-    parser.add_argument('--mmgp_profile', type=int, default=1)
-    parser.add_argument('--mmgp_verbose', type=int, default=1)
 
     args = parser.parse_args()
 

@@ -44,6 +44,3 @@ onnxruntime
 timm
 PyNanoInstantMeshes
 aura-sr
-
-
-mmgp==3.1.3

@@ -30,9 +30,8 @@ from diffusers import StableDiffusionInstructPix2PixPipeline, EulerAncestralDisc
 
 
 class Light_Shadow_Remover():
-    def __init__(self, config, use_mmgp=False):
+    def __init__(self, config):
         self.device = config.device
-        self.use_mmgp = use_mmgp
         self.cfg_image = 1.5
         self.cfg_text = 1.0
 
@@ -44,7 +43,7 @@ class Light_Shadow_Remover():
         pipeline.scheduler = EulerAncestralDiscreteScheduler.from_config(pipeline.scheduler.config)
         pipeline.set_progress_bar_config(disable=True)
 
-        self.pipeline = pipeline if use_mmgp else pipeline.to(self.device, torch.float16)
+        self.pipeline = pipeline.to(self.device, torch.float16)
 
     @torch.no_grad()
     def __call__(self, image):

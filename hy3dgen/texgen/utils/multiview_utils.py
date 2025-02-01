@@ -32,7 +32,7 @@ from diffusers import EulerAncestralDiscreteScheduler
 
 
 class Multiview_Diffusion_Net():
-    def __init__(self, config, use_mmgp=False) -> None:
+    def __init__(self, config) -> None:
         self.device = config.device
         self.view_size = 512
         multiview_ckpt_path = config.multiview_ckpt_path
@@ -49,7 +49,7 @@ class Multiview_Diffusion_Net():
 
         pipeline.set_progress_bar_config(disable=True)
 
-        self.pipeline = pipeline if use_mmgp else pipeline.to(self.device)
+        self.pipeline = pipeline.to(self.device)
 
     def seed_everything(self, seed):
         random.seed(seed)
