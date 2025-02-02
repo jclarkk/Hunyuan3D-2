@@ -15,7 +15,7 @@ sys.modules["torchvision.transforms.functional_tensor"] = functional_tensor
 from .download_util import load_file_from_url
 
 
-def load_model(config, num_steps=1, bs=1, tiled_vae=True, color_fix="", chopping_size=128, chopping_bs=8):
+def load_model(config, num_steps=2, bs=1, tiled_vae=True, color_fix="", chopping_size=128, chopping_bs=8):
     sd_path = "./weights"
     os.makedirs(sd_path, exist_ok=True)
     config.sd_pipe.params.cache_dir = sd_path

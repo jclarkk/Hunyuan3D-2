@@ -53,7 +53,7 @@ class Hunyuan3DTexGenConfig:
         self.candidate_view_weights = [1, 0.1, 0.5, 0.1, 0.1, 0.1]
 
         self.candidate_camera_azims_enhanced = [0, 90, 180, 270, 0, 180, 90, 270, 45, 135, 225, 310, 45, 135, 225, 310]
-        self.candidate_camera_elevs_enhanced = [0, 0, 0, 0, 90, -90, -45, -45, 15, 15, 15, 15, -15, -15, -15, -15]
+        self.candidate_camera_elevs_enhanced = [15, 0, 0, 0, 90, -90, -45, -45, 15, 15, 15, 15, -15, -15, -15, -15]
         self.candidate_view_weights_enhanced = [1, 0.1, 0.5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1,
                                                 0.1]
 
@@ -194,8 +194,8 @@ class Hunyuan3DPaintPipeline:
         return new_image
 
     @torch.no_grad()
-    def __call__(self, mesh, image, texture_size=2048, upscale=False, enhance_texture_angles=False, diffusion_sr=False):
-        self.render.set_default_texture_resolution(texture_size)
+    def __call__(self, mesh, image, upscale=False, enhance_texture_angles=False, diffusion_sr=False,
+                 normal_enhance=False):
 
         if isinstance(image, str):
             image_prompt = Image.open(image)
@@ -266,7 +266,7 @@ class Hunyuan3DPaintPipeline:
                     img_tensor = pil_to_tensor(rgb_img)
                     rgb_img = process_image(sampler, img_tensor)
 
-                rgb_img.resize((texture_size, texture_size))
+                rgb_img = rgb_img.resize((self.config.texture_size, self.config.texture_size))
 
                 new_multiviews.append(rgb_img)
 
@@ -289,7 +289,7 @@ class Hunyuan3DPaintPipeline:
                 if i < 6:
                     rgb_img = self.models['upscaler_model'].upscale_4x_overlapped(rgb_img, max_batch_size=16)
 
-                rgb_img.resize((texture_size, texture_size))
+                rgb_img = rgb_img.resize((self.config.texture_size, self.config.texture_size))
 
                 new_multiviews.append(rgb_img)
 
@@ -311,11 +311,31 @@ class Hunyuan3DPaintPipeline:
 
         mask_np = (mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
 
+        normal_texture, normal_mask = None, None
+        if normal_enhance:
+            print('Loading normal sampler...')
+            from .Lotus.sampling import LotusSampler
+            normal_sampler = LotusSampler(device=self.config.device)
+
+            normal_images = []
+            for i in tqdm(range(len(multiviews)), desc="Generating normal images..."):
+                img = multiviews[i]
+                normal_img = normal_sampler(img)
+                normal_images.append(normal_img)
+
+            del normal_sampler
+            print('Baking normal maps')
+
+            normal_texture, normal_mask = self.bake_from_multiview(multiviews,
+                                                                   selected_camera_elevs, selected_camera_azims,
+                                                                   selected_view_weights,
+                                                                   method=self.config.merge_method)
+
         print('Inpainting texture...')
         texture = self.texture_inpaint(texture, mask_np)
 
         self.render.set_texture(texture)
-        textured_mesh = self.render.save_mesh()
+        textured_mesh = self.render.save_mesh(normal_texture=normal_texture)
 
         return textured_mesh
 

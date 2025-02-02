@@ -235,10 +235,10 @@ class MeshRender():
         if texture_data is not None:
             self.set_texture(texture_data)
 
-    def save_mesh(self):
+    def save_mesh(self, normal_texture=None):
         texture_data = self.get_texture()
         texture_data = Image.fromarray((texture_data * 255).astype(np.uint8))
-        return save_mesh(self.mesh_copy, texture_data)
+        return save_mesh(self.mesh_copy, texture_data, normal_texture=normal_texture)
 
     def set_mesh(
         self,
@@ -307,6 +307,11 @@ class MeshRender():
 
     def get_texture(self):
         return self.tex.cpu().numpy()
+
+    def get_normal(self):
+        if self.normal_texture is None:
+            return None
+        return self.normal_texture.cpu().numpy()
 
     def to(self, device):
         self.device = device

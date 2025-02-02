@@ -17,9 +17,6 @@ def run(args):
     if args.prompt is not None and args.image_paths is not None:
         raise ValueError("Please provide either a prompt or an image, not both")
 
-    if args.texture_size not in [1024, 2048, 4096]:
-        raise ValueError("Texture size must either be 1k, 2k or 4k")
-
     t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled')
     texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2')
 
@@ -57,10 +54,10 @@ def run(args):
     mesh = texture_pipeline(
         mesh,
         image=image,
-        texture_size=args.texture_size,
         upscale=args.upscale,
         enhance_texture_angles=args.enhance_texture_angles,
-        diffusion_sr=args.diffusion_sr
+        diffusion_sr=args.diffusion_sr,
+        normal_enhance=args.normal_enhance
     )
     t5 = time.time()
     print(f"Texture generation took {t5 - t4:.2f} seconds")
@@ -85,11 +82,10 @@ if __name__ == "__main__":
     parser.add_argument('--mesh_path', type=str, help='Path to input mesh', required=True)
     parser.add_argument('--output_dir', type=str, default='./output', help='Path to output directory')
     parser.add_argument('--seed', type=int, default=0, help='Seed for the random number generator')
-    parser.add_argument('--texture_size', type=int, default=2048,
-                        help='Resolution size of the texture used for the GLB')
     parser.add_argument('--upscale', action='store_true', help='Upscale the texture', default=False)
     parser.add_argument('--diffusion_sr', action='store_true', help='Use diffusion Super-Resolution', default=False)
     parser.add_argument('--enhance_texture_angles', action='store_true', help='Enhance texture angles', default=False)
+    parser.add_argument('--normal_enhance', action='store_true', help='Enhance with normal map', default=False)
 
     args = parser.parse_args()
 

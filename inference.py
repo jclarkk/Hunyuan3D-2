@@ -54,7 +54,7 @@ def run(args):
         print('3D Paint pipeline loaded')
 
         t4 = time.time()
-        mesh = texture_pipeline(mesh, image=image, texture_size=args.texture_size)
+        mesh = texture_pipeline(mesh, image=image)
         t5 = time.time()
         print(f"Texture generation took {t5 - t4:.2f} seconds")
     else:
@@ -80,8 +80,6 @@ if __name__ == "__main__":
                         help='Path to input images. Can specify multiple paths separated by spaces')
     parser.add_argument('--output_dir', type=str, default='./output', help='Path to output directory')
     parser.add_argument('--seed', type=int, default=0, help='Seed for the random number generator')
-    parser.add_argument('--texture_size', type=int, default=2048,
-                        help='Resolution size of the texture used for the GLB')
     parser.add_argument('--im_remesh', action='store_true', help='Remesh using InstantMeshes', default=False)
     parser.add_argument('--face_count', type=int, default=100000, help='Maximum face count for the mesh')
     parser.add_argument('--texture', action='store_true', help='Texture the mesh', default=False)
