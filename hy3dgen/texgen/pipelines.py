@@ -330,6 +330,7 @@ class Hunyuan3DPaintPipeline:
                                                                    selected_camera_elevs, selected_camera_azims,
                                                                    selected_view_weights,
                                                                    method=self.config.merge_method)
+            normal_texture = normal_texture.cpu()
 
         print('Inpainting texture...')
         texture = self.texture_inpaint(texture, mask_np)
