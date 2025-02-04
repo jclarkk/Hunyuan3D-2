@@ -37,15 +37,7 @@ def load_mesh(mesh):
     return vtx_pos, pos_idx, vtx_uv, uv_idx, texture_data
 
 
-def save_mesh(mesh, texture_data, normal_texture=None):
-    if normal_texture is not None:
-        material = trimesh.visual.material.PBRMaterial(
-            baseColorTexture=texture_data,
-            normalTexture=normal_texture,
-            baseColorFactor=[1.0, 1.0, 1.0, 1.0],
-        )
-        mesh.visual = trimesh.visual.TextureVisuals(uv=mesh.visual.uv, material=material)
-    else:
-        material = trimesh.visual.texture.SimpleMaterial(image=texture_data, diffuse=(255, 255, 255))
-        mesh.visual = trimesh.visual.TextureVisuals(uv=mesh.visual.uv, image=texture_data, material=material)
+def save_mesh(mesh, texture_data):
+    material = trimesh.visual.texture.SimpleMaterial(image=texture_data, diffuse=(255, 255, 255))
+    mesh.visual = trimesh.visual.TextureVisuals(uv=mesh.visual.uv, image=texture_data, material=material)
     return mesh

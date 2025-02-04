@@ -33,6 +33,11 @@ from skimage import measure
 from tqdm import tqdm
 
 
+try:
+    from sageattention import sageattn
+except ImportError:
+    sageattn = None
+
 class FourierEmbedder(nn.Module):
     """The sin/cosine positional embedding. Given an input tensor `x` of shape [n_batch, ..., c_dim], it converts
     each feature dimension of `x[..., i]` into:
@@ -188,13 +193,19 @@ class QKVMultiheadCrossAttention(nn.Module):
         n_data: Optional[int] = None,
         width=None,
         qk_norm=False,
-        norm_layer=nn.LayerNorm
+        norm_layer=nn.LayerNorm,
+        attention_mode: str = "sdpa"
     ):
         super().__init__()
         self.heads = heads
         self.n_data = n_data
         self.q_norm = norm_layer(width // heads, elementwise_affine=True, eps=1e-6) if qk_norm else nn.Identity()
         self.k_norm = norm_layer(width // heads, elementwise_affine=True, eps=1e-6) if qk_norm else nn.Identity()
+
+        if attention_mode == "sdpa":
+            self.attention_func = F.scaled_dot_product_attention
+        elif attention_mode == "sageattn":
+            self.attention_func = sageattn
 
     def forward(self, q, kv):
         _, n_ctx, _ = q.shape
@@ -294,13 +305,18 @@ class QKVMultiheadAttention(nn.Module):
         n_ctx: int,
         width=None,
         qk_norm=False,
-        norm_layer=nn.LayerNorm
+        norm_layer=nn.LayerNorm,
+        attention_mode: str = "sdpa"
     ):
         super().__init__()
         self.heads = heads
         self.n_ctx = n_ctx
         self.q_norm = norm_layer(width // heads, elementwise_affine=True, eps=1e-6) if qk_norm else nn.Identity()
         self.k_norm = norm_layer(width // heads, elementwise_affine=True, eps=1e-6) if qk_norm else nn.Identity()
+        if attention_mode == "sdpa":
+            self.attention_func = F.scaled_dot_product_attention
+        elif attention_mode == "sageattn":
+            self.attention_func = sageattn
 
     def forward(self, qkv):
         bs, n_ctx, width = qkv.shape

@@ -37,6 +37,19 @@ def attention(q: Tensor, k: Tensor, v: Tensor, **kwargs) -> Tensor:
     return x
 
 
+try:
+    from sageattention import sageattn
+except ImportError:
+    print('Warning: sageattention not found, using default attention')
+    sageattn = None
+
+
+def attention_sage(q: Tensor, k: Tensor, v: Tensor, **kwargs) -> Tensor:
+    x = sageattn(q, k, v)
+    x = rearrange(x, "B H L D -> B L (H D)")
+    return x
+
+
 def timestep_embedding(t: Tensor, dim, max_period=10000, time_factor: float = 1000.0):
     """
     Create sinusoidal timestep embeddings.
@@ -151,7 +164,12 @@ class DoubleStreamBlock(nn.Module):
         num_heads: int,
         mlp_ratio: float,
         qkv_bias: bool = False,
+        attention_mode: str = "sdpa",
     ):
+        if attention_mode == "sdpa":
+            self.attention_func = attention
+        elif attention_mode == "sageattn":
+            self.attention_func = attention_sage
         super().__init__()
         mlp_hidden_dim = int(hidden_size * mlp_ratio)
         self.num_heads = num_heads
@@ -221,8 +239,13 @@ class SingleStreamBlock(nn.Module):
         num_heads: int,
         mlp_ratio: float = 4.0,
         qk_scale: Optional[float] = None,
+        attention_mode: str = "sdpa",
     ):
         super().__init__()
+        if attention_mode == "sdpa":
+            self.attention_func = attention
+        elif attention_mode == "sageattn":
+            self.attention_func = attention_sage
 
         self.hidden_dim = hidden_size
         self.num_heads = num_heads

@@ -29,10 +29,18 @@ def run(args):
     t1 = time.time()
     print(f"Image processing took {t1 - t0:.2f} seconds")
 
-    mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
-        'tencent/Hunyuan3D-2',
-        use_safetensors=True
-    )
+    if args.fast:
+        mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
+            'tencent/Hunyuan3D-2',
+            use_safetensors=True,
+            subfolder='hunyuan3d-dit-v2-0-fast',
+            variant='fp16'
+        )
+    else:
+        mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
+            'tencent/Hunyuan3D-2',
+            use_safetensors=True
+        )
     print('3D DiT pipeline loaded')
 
     # Generate mesh
@@ -80,6 +88,7 @@ if __name__ == "__main__":
                         help='Path to input images. Can specify multiple paths separated by spaces')
     parser.add_argument('--output_dir', type=str, default='./output', help='Path to output directory')
     parser.add_argument('--seed', type=int, default=0, help='Seed for the random number generator')
+    parser.add_argument('--fast', action='store_true', help='Use fast mode', default=False)
     parser.add_argument('--im_remesh', action='store_true', help='Remesh using InstantMeshes', default=False)
     parser.add_argument('--face_count', type=int, default=100000, help='Maximum face count for the mesh')
     parser.add_argument('--texture', action='store_true', help='Texture the mesh', default=False)

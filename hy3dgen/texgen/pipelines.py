@@ -31,9 +31,8 @@ import numpy as np
 import torch
 from PIL import Image
 
-from aura_sr import AuraSR
-
 from .differentiable_renderer.mesh_render import MeshRender
+from .upscalers.pipelines import AuraSRUpscalerPipeline, InvSRUpscalerPipeline, FluxUpscalerPipeline
 from .utils.dehighlight_utils import Light_Shadow_Remover
 from .utils.multiview_utils import Multiview_Diffusion_Net
 from .utils.uv_warp_utils import mesh_uv_wrap
@@ -194,8 +193,7 @@ class Hunyuan3DPaintPipeline:
         return new_image
 
     @torch.no_grad()
-    def __call__(self, mesh, image, upscale=False, enhance_texture_angles=False, diffusion_sr=False,
-                 normal_enhance=False):
+    def __call__(self, mesh, image, upscale_model='Aura', enhance_texture_angles=False, normal_enhance=False):
 
         if isinstance(image, str):
             image_prompt = Image.open(image)
@@ -250,55 +248,36 @@ class Hunyuan3DPaintPipeline:
         del self.models['multiview_model']
         torch.cuda.empty_cache()
 
-        if upscale and diffusion_sr:
-            from .InvSR.sampler_invsr import process_image, pil_to_tensor
+        if upscale_model == 'Aura':
+            upscaler = AuraSRUpscalerPipeline.from_pretrained()
+        elif upscale_model == 'InvSR':
+            upscaler = InvSRUpscalerPipeline.from_pretrained(self.config.device)
+        elif upscale_model == 'Flux':
+            upscaler = FluxUpscalerPipeline.from_pretrained(self.config.device)
+        else:
+            raise ValueError(f"Unknown upscale model {upscale_model}")
 
-            sampler = load_diffusion_sr()
-            print('Diffusion SR model loaded')
-
-            new_multiviews = []
-
-            from tqdm import tqdm
-            for i in tqdm(range(len(multiviews)), desc="Processing multiviews"):
-                rgb_img = multiviews[i].convert("RGB")
-
-                if i < 6:
-                    img_tensor = pil_to_tensor(rgb_img)
-                    rgb_img = process_image(sampler, img_tensor)
-
-                rgb_img = rgb_img.resize((self.config.texture_size, self.config.texture_size))
-
-                new_multiviews.append(rgb_img)
-
-            del sampler
-            torch.cuda.empty_cache()
-
-            multiviews = new_multiviews
-        elif upscale:
-            self.models['upscaler_model'] = AuraSR.from_pretrained("fal/AuraSR-v2")
+        if upscale_model is not None:
             print('Upscaler model loaded')
 
-            # Multi view images are 512x512 so we will use AuraSR-v2 to upscale them to 2048x2048
             new_multiviews = []
 
             from tqdm import tqdm
-            for i in tqdm(range(len(multiviews)), desc="Processing multiviews"):
+            for i in tqdm(range(len(multiviews)), desc="Upscaling multiviews"):
                 rgb_img = multiviews[i].convert("RGB")
 
-                # Only enhance first 6 images, otherwise just resize.
                 if i < 6:
-                    rgb_img = self.models['upscaler_model'].upscale_4x_overlapped(rgb_img, max_batch_size=16)
+                    rgb_img = upscaler([rgb_img])
 
                 rgb_img = rgb_img.resize((self.config.texture_size, self.config.texture_size))
 
                 new_multiviews.append(rgb_img)
 
-            multiviews = new_multiviews
-
-            del self.models['upscaler_model']
+            del upscaler
             torch.cuda.empty_cache()
 
-            print('Finished processing multiviews')
+            multiviews = new_multiviews
+
         else:
             for i in range(len(multiviews)):
                 multiviews[i] = multiviews[i].resize(
@@ -311,44 +290,10 @@ class Hunyuan3DPaintPipeline:
 
         mask_np = (mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
 
-        normal_texture, normal_mask = None, None
-        if normal_enhance:
-            print('Loading normal sampler...')
-            from .Lotus.sampling import LotusSampler
-            normal_sampler = LotusSampler(device=self.config.device)
-
-            normal_images = []
-            for i in tqdm(range(len(multiviews)), desc="Generating normal images..."):
-                img = multiviews[i]
-                normal_img = normal_sampler(img)
-                normal_images.append(normal_img)
-
-            del normal_sampler
-            print('Baking normal maps')
-
-            normal_texture, normal_mask = self.bake_from_multiview(multiviews,
-                                                                   selected_camera_elevs, selected_camera_azims,
-                                                                   selected_view_weights,
-                                                                   method=self.config.merge_method)
-            normal_texture = normal_texture.cpu()
-
         print('Inpainting texture...')
         texture = self.texture_inpaint(texture, mask_np)
 
         self.render.set_texture(texture)
-        textured_mesh = self.render.save_mesh(normal_texture=normal_texture)
+        textured_mesh = self.render.save_mesh()
 
         return textured_mesh
-
-
-def load_diffusion_sr():
-    from omegaconf import OmegaConf
-    from .InvSR.sampler_invsr import InvSamplerSR
-    from .InvSR.utils import model_utils
-    # Load config
-    config_path = './hy3dgen/texgen/InvSR/configs/sample-sd-turbo.yaml'
-    config = OmegaConf.load(config_path)
-    # Load model
-    model_utils.load_model(config)
-    # Load sampler
-    return InvSamplerSR(config)

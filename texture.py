@@ -45,7 +45,7 @@ def run(args):
     # Reduce face count
     if len(mesh.faces) > 100000:
         ms = import_mesh(mesh)
-        ms = reduce_face(ms, max_facenum=100000)
+        ms = reduce_face(ms, max_facenum=90000)
         current_mesh = ms.current_mesh()
         mesh = trimesh.Trimesh(vertices=current_mesh.vertex_matrix(), faces=current_mesh.face_matrix())
 

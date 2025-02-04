@@ -16,7 +16,7 @@ gradient_checkpointing_vae: True
 sliced_vae: False
 
 # classifer-free guidance
-cfg_scale: 1.0
+cfg_scale: 0.5
 
 # sampling settings 
 start_timesteps: 200
