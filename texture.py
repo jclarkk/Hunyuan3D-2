@@ -56,6 +56,7 @@ def run(args):
         image=image,
         upscale_model=args.upscale_model,
         enhance_texture_angles=args.enhance_texture_angles,
+        pbr=args.pbr,
         debug=args.debug
     )
     t5 = time.time()
@@ -83,6 +84,7 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, default=0, help='Seed for the random number generator')
     parser.add_argument('--upscale_model', type=str, default=None, help='Upscale model to use')
     parser.add_argument('--enhance_texture_angles', action='store_true', help='Enhance texture angles', default=False)
+    parser.add_argument('--pbr', action='store_true', help='Generate PBR textures', default=False)
     parser.add_argument('--debug', action='store_true', help='Debug mode', default=False)
 
     args = parser.parse_args()
