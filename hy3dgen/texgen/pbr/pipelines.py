@@ -77,3 +77,19 @@ class RGB2XPipeline:
         packed_image = np.stack([zero_channel, roughness, metalness], axis=-1)
 
         return Image.fromarray(packed_image, mode='RGB')
+
+    @staticmethod
+    def analyze_texture(texture_image):
+        """
+        Analyzes a texture image to estimate roughness and metallic properties dynamically.
+        """
+        texture_np = np.array(texture_image.convert("L"))
+
+        contrast = np.std(texture_np)
+
+        # Normalize to 0-1
+        metallic_likelihood = contrast / 255.0
+
+        roughness_likelihood = 1.0 - metallic_likelihood
+
+        return metallic_likelihood, roughness_likelihood
