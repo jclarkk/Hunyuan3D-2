@@ -21,7 +21,7 @@ class FluxUpscalerPipeline:
             controlnet=controlnet,
             torch_dtype=torch.bfloat16
         )
-        pipe.to(device)
+        pipe.enable_model_cpu_offload()
 
         return cls(pipe, device)
 
