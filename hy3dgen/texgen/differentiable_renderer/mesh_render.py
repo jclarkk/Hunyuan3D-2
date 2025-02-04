@@ -235,10 +235,10 @@ class MeshRender():
         if texture_data is not None:
             self.set_texture(texture_data)
 
-    def save_mesh(self):
+    def save_mesh(self, normal_texture=None, metallic_roughness_texture=None):
         texture_data = self.get_texture()
         texture_data = Image.fromarray((texture_data * 255).astype(np.uint8))
-        return save_mesh(self.mesh_copy, texture_data)
+        return save_mesh(self.mesh_copy, texture_data, normal_texture, metallic_roughness_texture)
 
     def set_mesh(
         self,

@@ -193,7 +193,7 @@ class Hunyuan3DPaintPipeline:
         return new_image
 
     @torch.no_grad()
-    def __call__(self, mesh, image, upscale_model='Aura', enhance_texture_angles=False, normal_enhance=False):
+    def __call__(self, mesh, image, upscale_model='Aura', enhance_texture_angles=False, pbr=False, debug=False):
 
         if isinstance(image, str):
             image_prompt = Image.open(image)
@@ -226,6 +226,10 @@ class Hunyuan3DPaintPipeline:
             selected_camera_elevs, selected_camera_azims, use_abs_coor=True)
         position_maps = self.render_position_multiview(
             selected_camera_elevs, selected_camera_azims)
+        if debug:
+            for i in range(len(normal_maps)):
+                normal_maps[i].save(f'debug_normal_map_{i}.png')
+                position_maps[i].save(f'debug_position_map_{i}.png')
 
         if enhance_texture_angles:
             camera_info = [
@@ -265,9 +269,14 @@ class Hunyuan3DPaintPipeline:
             from tqdm import tqdm
             for i in tqdm(range(len(multiviews)), desc="Upscaling multiviews"):
                 rgb_img = multiviews[i].convert("RGB")
+                if debug:
+                    rgb_img.save(f'debug_multiview_{i}.png')
 
                 if i < 6:
                     rgb_img = upscaler(rgb_img)
+
+                    if debug:
+                        rgb_img.save(f'debug_multiview_{i}_upscaled.png')
 
                 rgb_img = rgb_img.resize((self.config.texture_size, self.config.texture_size))
 
@@ -288,12 +297,70 @@ class Hunyuan3DPaintPipeline:
                                                  selected_camera_elevs, selected_camera_azims, selected_view_weights,
                                                  method=self.config.merge_method)
 
+        normal_texture = None
+        metallic_roughness_texture = None
+        if pbr:
+            from .pbr.pipelines import RGB2XPipeline
+            pbr_pipeline = RGB2XPipeline.from_pretrained(self.config.device)
+
+            albedo_multiviews = []
+            normal_multiviews = []
+            roughness_multiviews = []
+            metallic_multiviews = []
+
+            from tqdm import tqdm
+            for i in tqdm(range(len(multiviews)), desc="Generating PBR for multiviews"):
+                pbr_dict = pbr_pipeline(multiviews[i])
+                albedo = pbr_dict['albedo']
+                normal = pbr_dict['normal']
+                roughness = pbr_dict['roughness']
+                metallic = pbr_dict['metallic']
+
+                albedo_multiviews.append(albedo)
+                normal_multiviews.append(normal)
+                roughness_multiviews.append(roughness)
+                metallic_multiviews.append(metallic)
+
+            print('Baking albedo PBR texture...')
+            texture, mask = self.bake_from_multiview(albedo_multiviews,
+                                                     selected_camera_elevs,
+                                                     selected_camera_azims,
+                                                     selected_view_weights,
+                                                     method=self.config.merge_method)
+            print('Baking normal PBR texture...')
+            normal_texture, _ = self.bake_from_multiview(normal_multiviews,
+                                                            selected_camera_elevs,
+                                                            selected_camera_azims,
+                                                            selected_view_weights,
+                                                            method=self.config.merge_method)
+            print('Baking roughness PBR texture...')
+            roughness_texture, _ = self.bake_from_multiview(roughness_multiviews,
+                                                            selected_camera_elevs,
+                                                            selected_camera_azims,
+                                                            selected_view_weights,
+                                                            method=self.config.merge_method)
+            print('Baking metallic PBR texture...')
+            metallic_texture, _ = self.bake_from_multiview(metallic_multiviews,
+                                                            selected_camera_elevs,
+                                                            selected_camera_azims,
+                                                            selected_view_weights,
+                                                            method=self.config.merge_method)
+
+            metallic_roughness_texture = pbr_pipeline.combine_roughness_metalness(
+                np.asarray(roughness_texture),
+                np.asarray(metallic_texture)
+            )
+            if debug:
+                texture.save('debug_albedo_pbr_texture.png')
+                normal_texture.save('debug_normal_pbr_texture.png')
+                metallic_roughness_texture.save('debug_metallic_roughness_pbr_texture.png')
+
         mask_np = (mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
 
         print('Inpainting texture...')
         texture = self.texture_inpaint(texture, mask_np)
 
         self.render.set_texture(texture)
-        textured_mesh = self.render.save_mesh()
+        textured_mesh = self.render.save_mesh(normal_texture, metallic_roughness_texture)
 
         return textured_mesh
