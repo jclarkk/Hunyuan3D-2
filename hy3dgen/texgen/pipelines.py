@@ -333,23 +333,26 @@ class Hunyuan3DPaintPipeline:
                                                             selected_camera_azims,
                                                             selected_view_weights,
                                                             method=self.config.merge_method)
+            normal_texture = Image.fromarray(normal_texture.cpu().numpy())
             print('Baking roughness PBR texture...')
             roughness_texture, _ = self.bake_from_multiview(roughness_multiviews,
                                                             selected_camera_elevs,
                                                             selected_camera_azims,
                                                             selected_view_weights,
                                                             method=self.config.merge_method)
+            roughness_texture = roughness_texture.cpu().numpy()
             print('Baking metallic PBR texture...')
             metallic_texture, _ = self.bake_from_multiview(metallic_multiviews,
                                                             selected_camera_elevs,
                                                             selected_camera_azims,
                                                             selected_view_weights,
                                                             method=self.config.merge_method)
-
+            metallic_texture = metallic_texture.cpu().numpy()
             metallic_roughness_texture = pbr_pipeline.combine_roughness_metalness(
-                np.asarray(roughness_texture),
-                np.asarray(metallic_texture)
+                roughness_texture,
+                metallic_texture
             )
+
             if debug:
                 texture.save('debug_albedo_pbr_texture.png')
                 normal_texture.save('debug_normal_pbr_texture.png')
