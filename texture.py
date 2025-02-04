@@ -54,7 +54,7 @@ def run(args):
     mesh = texture_pipeline(
         mesh,
         image=image,
-        upscale_method=args.upscale_method,
+        upscale_model=args.upscale_model,
         enhance_texture_angles=args.enhance_texture_angles,
     )
     t5 = time.time()
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     parser.add_argument('--mesh_path', type=str, help='Path to input mesh', required=True)
     parser.add_argument('--output_dir', type=str, default='./output', help='Path to output directory')
     parser.add_argument('--seed', type=int, default=0, help='Seed for the random number generator')
-    parser.add_argument('--upscale_method', type=str, default=None, help='Upscale method')
+    parser.add_argument('--upscale_model', type=str, default=None, help='Upscale model to use')
     parser.add_argument('--enhance_texture_angles', action='store_true', help='Enhance texture angles', default=False)
 
     args = parser.parse_args()
