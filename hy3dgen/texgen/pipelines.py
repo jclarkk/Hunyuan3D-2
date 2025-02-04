@@ -267,7 +267,7 @@ class Hunyuan3DPaintPipeline:
                 rgb_img = multiviews[i].convert("RGB")
 
                 if i < 6:
-                    rgb_img = upscaler([rgb_img])
+                    rgb_img = upscaler(rgb_img)
 
                 rgb_img = rgb_img.resize((self.config.texture_size, self.config.texture_size))
 

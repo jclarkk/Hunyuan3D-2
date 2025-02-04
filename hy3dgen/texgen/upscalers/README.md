@@ -18,5 +18,5 @@ pip install -r requirements.txt
 ## Flux
 
 ```
-pip install diffusers -U
+pip install optimum diffusers -U
 ```
