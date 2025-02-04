@@ -322,7 +322,7 @@ class Hunyuan3DPaintPipeline:
                 metallic_multiviews.append(metallic)
 
             print('Baking albedo PBR texture...')
-            texture, mask = self.bake_from_multiview(albedo_multiviews,
+            albedo_texture, mask = self.bake_from_multiview(albedo_multiviews,
                                                      selected_camera_elevs,
                                                      selected_camera_azims,
                                                      selected_view_weights,
@@ -357,6 +357,8 @@ class Hunyuan3DPaintPipeline:
                 metallic_texture
             )
             metallic_factor, roughness_factor = pbr_pipeline.analyze_texture(texture)
+
+            texture = albedo_texture
 
         mask_np = (mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
 
