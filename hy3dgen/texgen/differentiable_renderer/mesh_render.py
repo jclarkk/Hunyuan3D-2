@@ -238,6 +238,7 @@ class MeshRender():
     def save_mesh(self, normal_texture=None, metallic_roughness_texture=None, metallic_factor=1.0, roughness_factor=1.0):
         texture_data = self.get_texture()
         texture_data = Image.fromarray((texture_data * 255).astype(np.uint8))
+
         return save_mesh(
             self.mesh_copy,
             texture_data,

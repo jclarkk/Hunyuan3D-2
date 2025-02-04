@@ -79,11 +79,12 @@ class RGB2XPipeline:
         return Image.fromarray(packed_image, mode='RGB')
 
     @staticmethod
-    def analyze_texture(texture_image):
+    def analyze_texture(texture_tensor):
         """
         Analyzes a texture image to estimate roughness and metallic properties dynamically.
         """
-        texture_np = np.array(texture_image.convert("L"))
+        texture = texture_tensor.squeeze(0)
+        texture_np = texture.cpu().numpy()
 
         contrast = np.std(texture_np)
 

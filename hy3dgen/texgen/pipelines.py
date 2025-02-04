@@ -297,8 +297,7 @@ class Hunyuan3DPaintPipeline:
                                                  selected_camera_elevs, selected_camera_azims, selected_view_weights,
                                                  method=self.config.merge_method)
 
-        normal_texture = None
-        metallic_roughness_texture = None
+        normal_texture, metallic_roughness_texture, metallic_factor, roughness_factor = None, None, None, None
         if pbr:
             from .pbr.pipelines import RGB2XPipeline
             pbr_pipeline = RGB2XPipeline.from_pretrained(self.config.device)
@@ -323,16 +322,16 @@ class Hunyuan3DPaintPipeline:
 
             print('Baking albedo PBR texture...')
             albedo_texture, mask = self.bake_from_multiview(albedo_multiviews,
-                                                     selected_camera_elevs,
-                                                     selected_camera_azims,
-                                                     selected_view_weights,
-                                                     method=self.config.merge_method)
-            print('Baking normal PBR texture...')
-            normal_texture, _ = self.bake_from_multiview(normal_multiviews,
                                                             selected_camera_elevs,
                                                             selected_camera_azims,
                                                             selected_view_weights,
                                                             method=self.config.merge_method)
+            print('Baking normal PBR texture...')
+            normal_texture, _ = self.bake_from_multiview(normal_multiviews,
+                                                         selected_camera_elevs,
+                                                         selected_camera_azims,
+                                                         selected_view_weights,
+                                                         method=self.config.merge_method)
             normal_texture = normal_texture.squeeze(0)
             normal_texture_np = normal_texture.cpu().numpy()
             if normal_texture_np.dtype == np.float32:
@@ -347,10 +346,10 @@ class Hunyuan3DPaintPipeline:
             roughness_texture = roughness_texture.cpu().numpy()
             print('Baking metallic PBR texture...')
             metallic_texture, _ = self.bake_from_multiview(metallic_multiviews,
-                                                            selected_camera_elevs,
-                                                            selected_camera_azims,
-                                                            selected_view_weights,
-                                                            method=self.config.merge_method)
+                                                           selected_camera_elevs,
+                                                           selected_camera_azims,
+                                                           selected_view_weights,
+                                                           method=self.config.merge_method)
             metallic_texture = metallic_texture.cpu().numpy()
             metallic_roughness_texture = pbr_pipeline.combine_roughness_metalness(
                 roughness_texture,
@@ -368,7 +367,9 @@ class Hunyuan3DPaintPipeline:
         self.render.set_texture(texture)
         textured_mesh = self.render.save_mesh(
             normal_texture,
-            metallic_roughness_texture
+            metallic_roughness_texture,
+            metallic_factor,
+            roughness_factor
         )
 
         return textured_mesh
