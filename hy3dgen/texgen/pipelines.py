@@ -2,7 +2,6 @@
 # and Other Licenses of the Third-Party Components therein:
 # The below Model in this distribution may have been modified by THL A29 Limited
 # ("Tencent Modifications"). All Tencent Modifications are Copyright (C) 2024 THL A29 Limited.
-import sys
 
 # Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
 # The below software and/or models in this distribution may have been
@@ -27,6 +26,7 @@ import sys
 import logging
 import os
 
+import cv2
 import numpy as np
 import torch
 from PIL import Image
@@ -369,11 +369,17 @@ class Hunyuan3DPaintPipeline:
                 metallic_texture
             )
 
-            metallic_factor, roughness_factor = self.calculate_metalness_roughness_factors(
-                mask,
-                metallic_texture,
-                roughness_texture
-            )
+            raw_roughness_value = np.mean(roughness_texture)
+            raw_metalness_value = np.mean(metallic_texture)
+
+            material_type = self.estimate_material_type(image_prompt)
+            print(f"Estimated material type: {material_type}")
+
+            roughness_factor = self.calibrate_roughness(raw_roughness_value, material_type)
+            print(f"Calibrated roughness for {material_type}: {roughness_factor}")
+
+            metallic_factor = self.calibrate_metalness(raw_metalness_value, material_type)
+            print(f"Calibrated metallic for {material_type}: {metallic_factor}")
 
         mask_np = (mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
 
@@ -433,30 +439,74 @@ class Hunyuan3DPaintPipeline:
         return image_list
 
     @staticmethod
-    def calculate_metalness_roughness_factors(mask, metallic_texture, roughness_texture):
-        mask_np = mask.cpu().numpy()
-        if mask_np.dtype != np.float32:
-            mask_float = mask_np.astype(np.float32) / 255.0
+    def estimate_material_type(albedo_image: Image.Image) -> str:
+        """
+        Estimate material type from an albedo image using HSV heuristics.
+        Returns one of: "metal", "wood", "plastic", or "rubber".
+        """
+        img_bgr = cv2.cvtColor(np.array(albedo_image), cv2.COLOR_RGB2BGR)
+
+        hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
+
+        # Compute average hue, saturation, and value
+        avg_hue = np.mean(hsv[:, :, 0])
+        avg_sat = np.mean(hsv[:, :, 1])
+        avg_val = np.mean(hsv[:, :, 2])
+
+        print(f"Avg Hue: {avg_hue:.2f}, Saturation: {avg_sat:.2f}, Value: {avg_val:.2f}")
+
+        # Heuristic rules:
+        # Metal: typically low saturation (neutral color)
+        if avg_sat < 50:
+            return "metal"
+        # Wood: warm hues and moderate saturation/brightness
+        if 10 <= avg_hue <= 40 and avg_sat >= 50 and avg_val < 200:
+            return "wood"
+        # Rubber: often darker (low brightness) and with a consistent non-metallic look.
+        if avg_val < 80 and avg_sat < 100:
+            return "rubber"
+        # Plastic: if none of the above criteria match, default to plastic.
+        return "plastic"
+
+    @staticmethod
+    def calibrate_roughness(raw_value, material_type):
+        """
+        Calibrate the raw roughness factor based on the estimated material type.
+        """
+        if material_type == "metal":
+            # For polished metals, roughness is often low.
+            # Here, we clamp it to a maximum value. You might also use a nonlinear mapping.
+            calibrated = min(raw_value, 0.4)
+        elif material_type == "wood":
+            # Wood surfaces are typically rougher; enforce a minimum roughness.
+            calibrated = max(raw_value, 0.6)
+        elif material_type == "plastic":
+            # Plastic may vary; if you find your raw value is too low or too high, adjust accordingly.
+            calibrated = raw_value  # or apply a mild calibration if needed
+        elif material_type == "rubber":
+            # Rubber is generally very rough.
+            calibrated = max(raw_value, 0.8)
         else:
-            mask_float = mask_np
+            calibrated = raw_value
+        return calibrated
 
-        # Compute weighted average only over pixels with sufficient confidence:
-        valid = mask_float > 0.1
-        if np.sum(valid) > 0:
-            metallic_factor = np.sum(metallic_texture[valid] * mask_float[valid]) / np.sum(mask_float[valid])
+    @staticmethod
+    def calibrate_metalness(raw_value, material_type):
+        """
+        Calibrate the raw metallic factor based on the estimated material type.
+        """
+        if material_type == "metal":
+            # For metal, boost the metallic factor more aggressively
+            calibrated = np.power(raw_value, 0.5)  # This boosts lower raw values upward.
+        elif material_type == "wood":
+            # For wood, leave the raw value almost unchanged
+            calibrated = raw_value
+        elif material_type == "plastic":
+            # For plastic, clamp the metallic value to a low maximum (e.g., 0.3)
+            calibrated = min(raw_value, 0.3)
+        elif material_type == "rubber":
+            # Rubber usually should be non-metallic
+            calibrated = 0.0
         else:
-            metallic_factor = np.mean(metallic_texture)
-
-        confidence_threshold = 0.1
-        valid_pixels = mask_float > confidence_threshold
-
-        if np.sum(valid_pixels) > 0:
-            roughness_factor = np.sum(roughness_texture[valid_pixels] * mask_float[valid_pixels]) / np.sum(
-                mask_float[valid_pixels])
-        else:
-            roughness_factor = np.mean(roughness_texture)
-
-        print(f"Computed metallic factor: {metallic_factor}")
-        print(f"Computed roughness factor: {roughness_factor}")
-
-        return metallic_factor, roughness_factor
+            calibrated = raw_value  # fallback
+        return calibrated
