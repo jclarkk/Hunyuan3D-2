@@ -325,10 +325,10 @@ class Hunyuan3DPaintPipeline:
             metallic_multiviews = self.split_images(metallic)
 
             for i in range(len(albedo_multiviews)):
-                albedo_multiviews[i] = albedo_multiviews[i].resize((self.config.texture_size, self.config.texture_size))
-                normal_multiviews[i] = normal_multiviews[i].resize((self.config.texture_size, self.config.texture_size))
-                roughness_multiviews[i] = roughness_multiviews[i].resize((self.config.texture_size, self.config.texture_size))
-                metallic_multiviews[i] = metallic_multiviews[i].resize((self.config.texture_size, self.config.texture_size))
+                albedo_multiviews[i] = albedo_multiviews[i].resize((self.config.render_size, self.config.render_size))
+                normal_multiviews[i] = normal_multiviews[i].resize((self.config.render_size, self.config.render_size))
+                roughness_multiviews[i] = roughness_multiviews[i].resize((self.config.render_size, self.config.render_size))
+                metallic_multiviews[i] = metallic_multiviews[i].resize((self.config.render_size, self.config.render_size))
 
                 if debug:
                     albedo_multiviews[i].save(f'debug_albedo_multiview_{i}.png')
