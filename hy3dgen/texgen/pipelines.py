@@ -448,26 +448,17 @@ class Hunyuan3DPaintPipeline:
 
         hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
 
-        # Compute average hue, saturation, and value
         avg_hue = np.mean(hsv[:, :, 0])
         avg_sat = np.mean(hsv[:, :, 1])
         avg_val = np.mean(hsv[:, :, 2])
 
         print(f"Avg Hue: {avg_hue:.2f}, Saturation: {avg_sat:.2f}, Value: {avg_val:.2f}")
-
-        # Prioritize wood if the hue indicates it, even if saturation is borderline
         if 10 <= avg_hue <= 40 <= avg_sat and avg_val < 200:
             return "wood"
-
-        # Then check for metal based on saturation
         if avg_sat < 40:
             return "metal"
-
-        # Check for rubber
         if avg_val < 80 and avg_sat < 100:
             return "rubber"
-
-        # Default to plastic if nothing else fits
         return "plastic"
 
     @staticmethod
@@ -476,17 +467,12 @@ class Hunyuan3DPaintPipeline:
         Calibrate the raw roughness factor based on the estimated material type.
         """
         if material_type == "metal":
-            # For polished metals, roughness is often low.
-            # Here, we clamp it to a maximum value. You might also use a nonlinear mapping.
             calibrated = min(raw_value, 0.4)
         elif material_type == "wood":
-            # Wood surfaces are typically rougher; enforce a minimum roughness.
             calibrated = max(raw_value, 0.6)
         elif material_type == "plastic":
-            # Plastic may vary; if you find your raw value is too low or too high, adjust accordingly.
-            calibrated = raw_value  # or apply a mild calibration if needed
+            calibrated = raw_value
         elif material_type == "rubber":
-            # Rubber is generally very rough.
             calibrated = max(raw_value, 0.8)
         else:
             calibrated = raw_value
@@ -498,12 +484,10 @@ class Hunyuan3DPaintPipeline:
         Calibrate the raw metallic factor based on the estimated material type.
         """
         if material_type == "metal":
-            # Using an exponent of 0.3 and a multiplier of 1.2 to boost the raw value
             calibrated = np.power(raw_value, 0.3) * 1.2
-            # Clamp the value to a maximum of 1.0
             calibrated = min(calibrated, 1.0)
         elif material_type == "wood":
-            calibrated = raw_value  # Wood remains low in metalness
+            calibrated = raw_value
         elif material_type == "plastic":
             calibrated = min(raw_value, 0.3)
         elif material_type == "rubber":
