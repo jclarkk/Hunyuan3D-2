@@ -54,7 +54,7 @@ class RGB2XPipeline:
         return pbr_dict
 
     @staticmethod
-    def combine_roughness_metalness(roughness_map: np.ndarray, metalness_map: np.ndarray) -> Image.Image:
+    def combine_roughness_metalness(roughness_map: Image.Image, metalness_map: Image.Image) -> Image.Image:
         """Pack roughness into G channel and metalness into B channel."""
         metalness = np.array(metalness_map)
         roughness = np.array(roughness_map)
@@ -79,13 +79,10 @@ class RGB2XPipeline:
         return Image.fromarray(packed_image, mode='RGB')
 
     @staticmethod
-    def analyze_texture(texture_tensor):
+    def analyze_texture(texture_np):
         """
         Analyzes a texture image to estimate roughness and metallic properties dynamically.
         """
-        texture = texture_tensor.squeeze(0)
-        texture_np = texture.cpu().numpy()
-
         contrast = np.std(texture_np)
 
         # Normalize to 0-1

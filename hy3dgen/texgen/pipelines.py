@@ -297,72 +297,32 @@ class Hunyuan3DPaintPipeline:
                                                  selected_camera_elevs, selected_camera_azims, selected_view_weights,
                                                  method=self.config.merge_method)
 
+        mask_np = (mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
+
+        print('Inpainting texture...')
+        texture = self.texture_inpaint(texture, mask_np)
+
         normal_texture, metallic_roughness_texture, metallic_factor, roughness_factor = None, None, None, None
         if pbr:
             from .pbr.pipelines import RGB2XPipeline
             pbr_pipeline = RGB2XPipeline.from_pretrained(self.config.device)
 
-            albedo_multiviews = []
-            normal_multiviews = []
-            roughness_multiviews = []
-            metallic_multiviews = []
+            # Convert texture to PIL Image first
+            texture_image_np = texture.cpu().numpy()
+            texture_image = Image.fromarray((texture_image_np * 255).astype(np.uint8))
 
-            from tqdm import tqdm
-            for i in tqdm(range(len(multiviews)), desc="Generating PBR for multiviews"):
-                pbr_dict = pbr_pipeline(multiviews[i])
-                albedo = pbr_dict['albedo']
-                normal = pbr_dict['normal']
-                roughness = pbr_dict['roughness']
-                metallic = pbr_dict['metallic']
+            pbr_dict = pbr_pipeline(texture_image)
+            texture = pbr_dict['albedo']
+            normal_texture = pbr_dict['normal']
+            roughness_texture = pbr_dict['roughness']
+            metallic_texture = pbr_dict['metallic']
 
-                albedo_multiviews.append(albedo)
-                normal_multiviews.append(normal)
-                roughness_multiviews.append(roughness)
-                metallic_multiviews.append(metallic)
-
-            print('Baking albedo PBR texture...')
-            albedo_texture, mask = self.bake_from_multiview(albedo_multiviews,
-                                                            selected_camera_elevs,
-                                                            selected_camera_azims,
-                                                            selected_view_weights,
-                                                            method=self.config.merge_method)
-            print('Baking normal PBR texture...')
-            normal_texture, _ = self.bake_from_multiview(normal_multiviews,
-                                                         selected_camera_elevs,
-                                                         selected_camera_azims,
-                                                         selected_view_weights,
-                                                         method=self.config.merge_method)
-            normal_texture = normal_texture.squeeze(0)
-            normal_texture_np = normal_texture.cpu().numpy()
-            if normal_texture_np.dtype == np.float32:
-                normal_texture_np = (normal_texture_np * 255).clip(0, 255).astype(np.uint8)
-            normal_texture = Image.fromarray(normal_texture_np)
-            print('Baking roughness PBR texture...')
-            roughness_texture, _ = self.bake_from_multiview(roughness_multiviews,
-                                                            selected_camera_elevs,
-                                                            selected_camera_azims,
-                                                            selected_view_weights,
-                                                            method=self.config.merge_method)
-            roughness_texture = roughness_texture.cpu().numpy()
-            print('Baking metallic PBR texture...')
-            metallic_texture, _ = self.bake_from_multiview(metallic_multiviews,
-                                                           selected_camera_elevs,
-                                                           selected_camera_azims,
-                                                           selected_view_weights,
-                                                           method=self.config.merge_method)
-            metallic_texture = metallic_texture.cpu().numpy()
             metallic_roughness_texture = pbr_pipeline.combine_roughness_metalness(
                 roughness_texture,
                 metallic_texture
             )
+
             metallic_factor, roughness_factor = pbr_pipeline.analyze_texture(texture)
-
-            texture = albedo_texture
-
-        mask_np = (mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
-
-        print('Inpainting texture...')
-        texture = self.texture_inpaint(texture, mask_np)
 
         self.render.set_texture(texture)
         textured_mesh = self.render.save_mesh(
