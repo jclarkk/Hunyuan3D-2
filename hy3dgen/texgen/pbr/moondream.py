@@ -18,8 +18,7 @@ class MoondreamPBRAssessmentPipeline:
         self.model = model
         self.tokenizer = tokenizer
 
-    def __call__(self, image_path):
-        image = Image.open(image_path)
+    def __call__(self, image: Image.Image):
         enc_image = self.model.encode_image(image)
 
         prompt = "What should be the roughness factor for the texture of the following object? Answer with a float value between 0 to 1."
