@@ -259,9 +259,9 @@ class Hunyuan3DPaintPipeline:
         elif upscale_model == 'Flux':
             upscaler = FluxUpscalerPipeline.from_pretrained(self.config.device)
         else:
-            raise ValueError(f"Unknown upscale model {upscale_model}")
+            upscaler = None
 
-        if upscale_model is not None:
+        if upscaler is not None:
             print('Upscaler model loaded')
 
             new_multiviews = []
@@ -291,6 +291,9 @@ class Hunyuan3DPaintPipeline:
             for i in range(len(multiviews)):
                 multiviews[i] = multiviews[i].resize(
                     (self.config.render_size, self.config.render_size))
+                
+                if debug:
+                    multiviews[i].save(f'debug_multiview_{i}.png')
 
         print('Baking texture...')
         texture, mask = self.bake_from_multiview(multiviews,
@@ -306,8 +309,8 @@ class Hunyuan3DPaintPipeline:
             pbr_camera_azims = [angle for angle in selected_camera_azims[:6]]
             pbr_camera_weights = [weight for weight in selected_view_weights[:6]]
 
-            # Downscale multiviews to 512x512 - use only 6 views
-            pre_pbr_multiviews = [view.resize((512, 512)) for view in multiviews[:6]]
+            # Use only 6 views
+            pre_pbr_multiviews = [view.resize((1024, 1024)) for view in multiviews[:6]]
             pre_pbr_image = self.concatenate_images(pre_pbr_multiviews)
 
             pbr_dict = pbr_pipeline(pre_pbr_image)
@@ -326,6 +329,12 @@ class Hunyuan3DPaintPipeline:
                 normal_multiviews[i] = normal_multiviews[i].resize((self.config.texture_size, self.config.texture_size))
                 roughness_multiviews[i] = roughness_multiviews[i].resize((self.config.texture_size, self.config.texture_size))
                 metallic_multiviews[i] = metallic_multiviews[i].resize((self.config.texture_size, self.config.texture_size))
+
+                if debug:
+                    albedo_multiviews[i].save(f'debug_albedo_multiview_{i}.png')
+                    normal_multiviews[i].save(f'debug_normal_multiview_{i}.png')
+                    roughness_multiviews[i].save(f'debug_roughness_multiview_{i}.png')
+                    metallic_multiviews[i].save(f'debug_metallic_multiview_{i}.png')
 
             print('Baking albedo PBR texture...')
             albedo_texture, mask = self.bake_from_multiview(albedo_multiviews,
@@ -383,30 +392,28 @@ class Hunyuan3DPaintPipeline:
 
     @staticmethod
     def concatenate_images(image_list):
-        """Concatenates 6 images (512x512) into a single 3072x3072 image."""
         grid_size = (3, 2)
-        output_size = (512 * grid_size[0], 512 * grid_size[1])
+        output_size = (1024 * grid_size[0], 1024 * grid_size[1])
 
         big_image = Image.new("RGB", output_size)
 
         for idx, img in enumerate(image_list):
-            x_offset = (idx % grid_size[0]) * 512
-            y_offset = (idx // grid_size[0]) * 512
+            x_offset = (idx % grid_size[0]) * 1024
+            y_offset = (idx // grid_size[0]) * 1024
             big_image.paste(img, (x_offset, y_offset))
 
         return big_image
 
     @staticmethod
     def split_images(big_image):
-        """Splits a 3072x3072 image back into 6 images of 512x512."""
         grid_size = (3, 2)
         image_list = []
 
         for row in range(grid_size[1]):
             for col in range(grid_size[0]):
-                x_offset = col * 512
-                y_offset = row * 512
-                cropped = big_image.crop((x_offset, y_offset, x_offset + 512, y_offset + 512))
+                x_offset = col * 1024
+                y_offset = row * 1024
+                cropped = big_image.crop((x_offset, y_offset, x_offset + 1024, y_offset + 1024))
                 image_list.append(cropped)
 
         return image_list
