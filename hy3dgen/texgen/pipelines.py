@@ -297,32 +297,73 @@ class Hunyuan3DPaintPipeline:
                                                  selected_camera_elevs, selected_camera_azims, selected_view_weights,
                                                  method=self.config.merge_method)
 
-        mask_np = (mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
-
-        print('Inpainting texture...')
-        texture = self.texture_inpaint(texture, mask_np)
-
         normal_texture, metallic_roughness_texture, metallic_factor, roughness_factor = None, None, None, None
         if pbr:
             from .pbr.pipelines import RGB2XPipeline
             pbr_pipeline = RGB2XPipeline.from_pretrained(self.config.device)
 
-            # Convert texture to PIL Image first
-            texture_image_np = texture.cpu().numpy()
-            texture_image = Image.fromarray((texture_image_np * 255).astype(np.uint8))
+            pbr_camera_elevs = [angle for angle in selected_camera_elevs[:6]]
+            pbr_camera_azims = [angle for angle in selected_camera_azims[:6]]
+            pbr_camera_weights = [weight for weight in selected_view_weights[:6]]
 
-            pbr_dict = pbr_pipeline(texture_image)
-            texture = pbr_dict['albedo']
-            normal_texture = pbr_dict['normal']
-            roughness_texture = pbr_dict['roughness']
-            metallic_texture = pbr_dict['metallic']
+            # Downscale multiviews to 512x512 - use only 6 views
+            pre_pbr_multiviews = [view.resize((512, 512)) for view in multiviews[:6]]
+            pre_pbr_image = self.concatenate_images(pre_pbr_multiviews)
 
+            pbr_dict = pbr_pipeline(pre_pbr_image)
+            albedo = pbr_dict['albedo']
+            normal = pbr_dict['normal']
+            roughness = pbr_dict['roughness']
+            metallic = pbr_dict['metallic']
+
+            albedo_multiviews = self.split_images(albedo)
+            normal_multiviews = self.split_images(normal)
+            roughness_multiviews = self.split_images(roughness)
+            metallic_multiviews = self.split_images(metallic)
+
+            print('Baking albedo PBR texture...')
+            albedo_texture, mask = self.bake_from_multiview(albedo_multiviews,
+                                                            pbr_camera_elevs,
+                                                            pbr_camera_azims,
+                                                            pbr_camera_weights,
+                                                            method=self.config.merge_method)
+            print('Baking normal PBR texture...')
+            normal_texture, _ = self.bake_from_multiview(normal_multiviews,
+                                                         pbr_camera_elevs,
+                                                         pbr_camera_azims,
+                                                         pbr_camera_weights,
+                                                         method=self.config.merge_method)
+            normal_texture = normal_texture.squeeze(0)
+            normal_texture_np = normal_texture.cpu().numpy()
+            if normal_texture_np.dtype == np.float32:
+                normal_texture_np = (normal_texture_np * 255).clip(0, 255).astype(np.uint8)
+            normal_texture = Image.fromarray(normal_texture_np)
+            print('Baking roughness PBR texture...')
+            roughness_texture, _ = self.bake_from_multiview(roughness_multiviews,
+                                                            pbr_camera_elevs,
+                                                            pbr_camera_azims,
+                                                            pbr_camera_weights,
+                                                            method=self.config.merge_method)
+            roughness_texture = roughness_texture.cpu().numpy()
+            print('Baking metallic PBR texture...')
+            metallic_texture, _ = self.bake_from_multiview(metallic_multiviews,
+                                                           pbr_camera_elevs,
+                                                           pbr_camera_azims,
+                                                           pbr_camera_weights,
+                                                           method=self.config.merge_method)
+            metallic_texture = metallic_texture.cpu().numpy()
             metallic_roughness_texture = pbr_pipeline.combine_roughness_metalness(
                 roughness_texture,
                 metallic_texture
             )
-
             metallic_factor, roughness_factor = pbr_pipeline.analyze_texture(texture)
+
+            texture = albedo_texture
+
+        mask_np = (mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
+
+        print('Inpainting texture...')
+        texture = self.texture_inpaint(texture, mask_np)
 
         self.render.set_texture(texture)
         textured_mesh = self.render.save_mesh(
@@ -333,3 +374,33 @@ class Hunyuan3DPaintPipeline:
         )
 
         return textured_mesh
+
+    @staticmethod
+    def concatenate_images(image_list):
+        """Concatenates 6 images (512x512) into a single 3072x3072 image."""
+        grid_size = (3, 2)
+        output_size = (512 * grid_size[0], 512 * grid_size[1])
+
+        big_image = Image.new("RGB", output_size)
+
+        for idx, img in enumerate(image_list):
+            x_offset = (idx % grid_size[0]) * 512
+            y_offset = (idx // grid_size[0]) * 512
+            big_image.paste(img, (x_offset, y_offset))
+
+        return big_image
+
+    @staticmethod
+    def split_images(big_image):
+        """Splits a 3072x3072 image back into 6 images of 512x512."""
+        grid_size = (3, 2)
+        image_list = []
+
+        for row in range(grid_size[1]):
+            for col in range(grid_size[0]):
+                x_offset = col * 512
+                y_offset = row * 512
+                cropped = big_image.crop((x_offset, y_offset, x_offset + 512, y_offset + 512))
+                image_list.append(cropped)
+
+        return image_list
