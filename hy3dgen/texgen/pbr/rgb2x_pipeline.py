@@ -799,7 +799,7 @@ class StableDiffusionAOVMatEstPipeline(
             aov = self.vae.decode(aov_latents, return_dict=False)[0]
             do_denormalize = [True] * aov.shape[0]
             aov_name = required_aovs[0]
-            if aov_name == "albedo" or aov_name == "irradiance":
+            if aov_name == "irradiance":
                 do_gamma_correction = True
             else:
                 do_gamma_correction = False
