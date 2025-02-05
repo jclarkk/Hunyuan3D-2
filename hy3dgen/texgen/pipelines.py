@@ -369,8 +369,11 @@ class Hunyuan3DPaintPipeline:
                 metallic_texture
             )
 
-            roughness_factor = np.mean(roughness_texture)
-            metallic_factor = np.mean(metallic_texture)
+            metallic_factor, roughness_factor = self.calculate_metalness_roughness_factors(
+                mask,
+                metallic_texture,
+                roughness_texture
+            )
 
         mask_np = (mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
 
@@ -428,3 +431,32 @@ class Hunyuan3DPaintPipeline:
                 image_list.append(cropped)
 
         return image_list
+
+    @staticmethod
+    def calculate_metalness_roughness_factors(mask, metallic_texture, roughness_texture):
+        mask_np = mask.cpu().numpy()
+        if mask_np.dtype != np.float32:
+            mask_float = mask_np.astype(np.float32) / 255.0
+        else:
+            mask_float = mask_np
+
+        # Compute weighted average only over pixels with sufficient confidence:
+        valid = mask_float > 0.1
+        if np.sum(valid) > 0:
+            metallic_factor = np.sum(metallic_texture[valid] * mask_float[valid]) / np.sum(mask_float[valid])
+        else:
+            metallic_factor = np.mean(metallic_texture)
+
+        confidence_threshold = 0.1
+        valid_pixels = mask_float > confidence_threshold
+
+        if np.sum(valid_pixels) > 0:
+            roughness_factor = np.sum(roughness_texture[valid_pixels] * mask_float[valid_pixels]) / np.sum(
+                mask_float[valid_pixels])
+        else:
+            roughness_factor = np.mean(roughness_texture)
+
+        print(f"Computed metallic factor: {metallic_factor}")
+        print(f"Computed roughness factor: {roughness_factor}")
+
+        return metallic_factor, roughness_factor
