@@ -232,11 +232,10 @@ class Hunyuan3DPaintPipeline:
 
         if enhance_texture_angles:
             camera_info = [
-                (((azim // 30) + 9) % 12) // {
-                    -90: 3, -45: 3, -20: 1, -15: 1, 0: 1, 15: 1, 20: 1, 90: 3
-                }[elev] + {
-                    -90: 36, -45: 36, -20: 0, -15: 0, 0: 12, 15: 24, 20: 24, 90: 40
-                }[elev]
+                (
+                        (((azim // 30) + 9) % 12) // {0: 1, 45: 3, -45: 3}[elev]
+                        + {0: 12, 45: 36, -45: 36}[elev]
+                )
                 for azim, elev in
                 zip(self.config.candidate_camera_azims_enhanced, self.config.candidate_camera_elevs_enhanced)
             ]
@@ -335,10 +334,10 @@ class Hunyuan3DPaintPipeline:
 
             print('Baking albedo PBR texture...')
             texture, mask = self.bake_from_multiview(albedo_multiviews,
-                                                            selected_camera_elevs,
-                                                            selected_camera_azims,
-                                                            selected_view_weights,
-                                                            method=self.config.merge_method)
+                                                     selected_camera_elevs,
+                                                     selected_camera_azims,
+                                                     selected_view_weights,
+                                                     method=self.config.merge_method)
 
             # For some reason the normal texture is creating artifacts so we won't use it at the moment
             normal_texture = None
