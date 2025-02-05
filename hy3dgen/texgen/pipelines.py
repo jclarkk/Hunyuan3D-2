@@ -369,9 +369,8 @@ class Hunyuan3DPaintPipeline:
                 metallic_texture
             )
 
-            from .pbr.moondream import MoondreamPBRAssessmentPipeline
-            assessment_pipeline = MoondreamPBRAssessmentPipeline.from_pretrained()
-            roughness_factor, metallic_factor = assessment_pipeline(image_prompt)
+            roughness_factor = np.mean(roughness_texture)
+            metallic_factor = np.mean(metallic_texture)
 
         mask_np = (mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
 
