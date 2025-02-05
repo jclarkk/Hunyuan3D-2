@@ -313,6 +313,7 @@ class Hunyuan3DPaintPipeline:
             pre_pbr_multiviews = [view.resize((1024, 1024)) for view in multiviews[:6]]
             pre_pbr_image = self.concatenate_images(pre_pbr_multiviews)
 
+            print('Generating PBR textures...')
             pbr_dict = pbr_pipeline(pre_pbr_image)
             albedo = pbr_dict['albedo']
             normal = pbr_dict['normal']
@@ -350,9 +351,7 @@ class Hunyuan3DPaintPipeline:
                                                          method=self.config.merge_method)
             normal_texture = normal_texture.squeeze(0)
             normal_texture_np = normal_texture.cpu().numpy()
-            if normal_texture_np.dtype == np.float32:
-                normal_texture_np = (normal_texture_np * 255).clip(0, 255).astype(np.uint8)
-            normal_texture = Image.fromarray(normal_texture_np)
+            normal_texture = Image.fromarray((normal_texture_np * 255).astype(np.uint8))
             print('Baking roughness PBR texture...')
             roughness_texture, _ = self.bake_from_multiview(roughness_multiviews,
                                                             pbr_camera_elevs,
