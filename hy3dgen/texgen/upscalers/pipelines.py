@@ -54,7 +54,7 @@ class InvSRUpscalerPipeline:
         from .InvSR.sampler_invsr import InvSamplerSR
         from .InvSR.utils import model_utils
         # Load config
-        config_path = './hy3dgen/texgen/InvSR/configs/sample-sd-turbo.yaml'
+        config_path = './hy3dgen/texgen/upscalers/InvSR/configs/sample-sd-turbo.yaml'
         config = OmegaConf.load(config_path)
         # Load model
         model_utils.load_model(config)
