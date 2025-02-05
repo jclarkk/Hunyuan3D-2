@@ -321,6 +321,12 @@ class Hunyuan3DPaintPipeline:
             roughness_multiviews = self.split_images(roughness)
             metallic_multiviews = self.split_images(metallic)
 
+            for i in range(len(albedo_multiviews)):
+                albedo_multiviews[i] = albedo_multiviews[i].resize((self.config.texture_size, self.config.texture_size))
+                normal_multiviews[i] = normal_multiviews[i].resize((self.config.texture_size, self.config.texture_size))
+                roughness_multiviews[i] = roughness_multiviews[i].resize((self.config.texture_size, self.config.texture_size))
+                metallic_multiviews[i] = metallic_multiviews[i].resize((self.config.texture_size, self.config.texture_size))
+
             print('Baking albedo PBR texture...')
             albedo_texture, mask = self.bake_from_multiview(albedo_multiviews,
                                                             pbr_camera_elevs,
