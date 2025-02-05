@@ -66,7 +66,9 @@ class InvSRUpscalerPipeline:
         self.device = device
 
     def __call__(self, input_image: Image.Image) -> Image.Image:
-        return Image.fromarray(self.sampler(input_image, self.device))
+        from .InvSR.sampler_invsr import process_image, pil_to_tensor
+        input_tensor = pil_to_tensor(input_image)
+        return process_image(self.sampler, input_tensor)
 
 
 class AuraSRUpscalerPipeline:
