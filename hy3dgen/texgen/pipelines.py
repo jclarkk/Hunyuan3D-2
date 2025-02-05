@@ -455,17 +455,19 @@ class Hunyuan3DPaintPipeline:
 
         print(f"Avg Hue: {avg_hue:.2f}, Saturation: {avg_sat:.2f}, Value: {avg_val:.2f}")
 
-        # Heuristic rules:
-        # Metal: typically low saturation (neutral color)
-        if avg_sat < 50:
-            return "metal"
-        # Wood: warm hues and moderate saturation/brightness
-        if 10 <= avg_hue <= 40 and avg_sat >= 50 and avg_val < 200:
+        # Prioritize wood if the hue indicates it, even if saturation is borderline
+        if 10 <= avg_hue <= 40 <= avg_sat and avg_val < 200:
             return "wood"
-        # Rubber: often darker (low brightness) and with a consistent non-metallic look.
+
+        # Then check for metal based on saturation
+        if avg_sat < 40:
+            return "metal"
+
+        # Check for rubber
         if avg_val < 80 and avg_sat < 100:
             return "rubber"
-        # Plastic: if none of the above criteria match, default to plastic.
+
+        # Default to plastic if nothing else fits
         return "plastic"
 
     @staticmethod
@@ -496,17 +498,16 @@ class Hunyuan3DPaintPipeline:
         Calibrate the raw metallic factor based on the estimated material type.
         """
         if material_type == "metal":
-            # For metal, boost the metallic factor more aggressively
-            calibrated = np.power(raw_value, 0.5)  # This boosts lower raw values upward.
+            # Using an exponent of 0.3 and a multiplier of 1.2 to boost the raw value
+            calibrated = np.power(raw_value, 0.3) * 1.2
+            # Clamp the value to a maximum of 1.0
+            calibrated = min(calibrated, 1.0)
         elif material_type == "wood":
-            # For wood, leave the raw value almost unchanged
-            calibrated = raw_value
+            calibrated = raw_value  # Wood remains low in metalness
         elif material_type == "plastic":
-            # For plastic, clamp the metallic value to a low maximum (e.g., 0.3)
             calibrated = min(raw_value, 0.3)
         elif material_type == "rubber":
-            # Rubber usually should be non-metallic
             calibrated = 0.0
         else:
-            calibrated = raw_value  # fallback
+            calibrated = raw_value
         return calibrated
