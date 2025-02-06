@@ -22,9 +22,6 @@
 # fine-tuning enabling code and other elements of the foregoing made publicly available
 # by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
 
-import bpy
-import bmesh
-import numpy as np
 import trimesh
 import xatlas
 
@@ -46,6 +43,9 @@ def mesh_uv_wrap(mesh):
 
 
 def bpy_unwrap_mesh(vertices, faces):
+    import bpy
+    import bmesh
+    import numpy as np
     # Create a new mesh and object
     mesh = bpy.data.meshes.new(name="TempMesh")
     obj = bpy.data.objects.new(name="TempObject", object_data=mesh)
