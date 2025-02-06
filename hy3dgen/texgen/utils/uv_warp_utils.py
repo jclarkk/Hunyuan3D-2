@@ -22,6 +22,9 @@
 # fine-tuning enabling code and other elements of the foregoing made publicly available
 # by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
 
+import bpy
+import bmesh
+import numpy as np
 import trimesh
 import xatlas
 
@@ -40,3 +43,44 @@ def mesh_uv_wrap(mesh):
     mesh.visual.uv = uvs
 
     return mesh
+
+
+def bpy_unwrap_mesh(vertices, faces):
+    # Create a new mesh and object
+    mesh = bpy.data.meshes.new(name="TempMesh")
+    obj = bpy.data.objects.new(name="TempObject", object_data=mesh)
+
+    # Link the object to the scene
+    bpy.context.collection.objects.link(obj)
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(True)
+
+    # Create a BMesh object and add geometry
+    bm = bmesh.new()
+
+    # Add vertices
+    vert_list = [bm.verts.new(tuple(v)) for v in vertices]
+    bm.verts.ensure_lookup_table()
+
+    # Add faces
+    for f in faces:
+        bm.faces.new([vert_list[i] for i in f])
+
+    # Write the BMesh to the mesh data
+    bm.to_mesh(mesh)
+    bm.free()
+
+    # Enter edit mode to unwrap
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.uv.smart_project(angle_limit=66.0, island_margin=0.03)
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    # Extract UV coordinates
+    uv_layer = mesh.uv_layers.active.data
+    uvs = np.array([uv.uv for uv in uv_layer], dtype=np.float32)
+
+    # Cleanup: Remove the temporary object from the scene
+    bpy.data.objects.remove(obj)
+    bpy.data.meshes.remove(mesh)
+
+    return uvs

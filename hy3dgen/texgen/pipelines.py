@@ -35,7 +35,7 @@ from .differentiable_renderer.mesh_render import MeshRender
 from .upscalers.pipelines import AuraSRUpscalerPipeline, InvSRUpscalerPipeline, FluxUpscalerPipeline
 from .utils.dehighlight_utils import Light_Shadow_Remover
 from .utils.multiview_utils import Multiview_Diffusion_Net
-from .utils.uv_warp_utils import mesh_uv_wrap
+from .utils.uv_warp_utils import bpy_unwrap_mesh
 
 logger = logging.getLogger(__name__)
 
@@ -207,7 +207,7 @@ class Hunyuan3DPaintPipeline:
         del self.models['delight_model']
 
         print('Wrapping UV...')
-        mesh = mesh_uv_wrap(mesh)
+        mesh = bpy_unwrap_mesh(mesh)
 
         self.render.load_mesh(mesh)
 
