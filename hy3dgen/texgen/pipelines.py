@@ -375,7 +375,8 @@ class Hunyuan3DPaintPipeline:
             material_type = self.estimate_material_type(image_prompt)
             print(f"Estimated material type: {material_type}")
 
-            roughness_factor = self.calibrate_roughness(raw_roughness_value, material_type)
+            roughness_values = roughness_texture.flatten()
+            roughness_factor = self.calibrate_roughness(raw_roughness_value, material_type, roughness_values)
             print(f"Calibrated roughness for {material_type}: {roughness_factor}")
 
             metallic_factor = self.calibrate_metalness(raw_metalness_value, material_type)
