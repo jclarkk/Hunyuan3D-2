@@ -462,18 +462,24 @@ class Hunyuan3DPaintPipeline:
         return "plastic"
 
     @staticmethod
-    def calibrate_roughness(raw_value, material_type):
+    def calibrate_roughness(raw_value, material_type, roughness_values):
         """
-        Calibrate the raw roughness factor based on the estimated material type.
+        Calibrate the raw roughness factor based on the material type and
+        the variance (standard deviation) of the roughness values.
         """
+        std_val = np.std(roughness_values)
+        variance_factor = 1.0
+        if std_val > 0.05:
+            variance_factor = 1.1
+
         if material_type == "metal":
-            calibrated = min(raw_value, 0.4)
+            calibrated = min(raw_value * variance_factor, 0.4)
         elif material_type == "wood":
-            calibrated = max(raw_value, 0.6)
+            calibrated = max(raw_value * variance_factor, 0.6)
         elif material_type == "plastic":
             calibrated = raw_value
         elif material_type == "rubber":
-            calibrated = max(raw_value, 0.8)
+            calibrated = max(raw_value * variance_factor, 0.8)
         else:
             calibrated = raw_value
         return calibrated
