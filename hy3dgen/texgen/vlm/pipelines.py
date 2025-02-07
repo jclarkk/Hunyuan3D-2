@@ -26,4 +26,5 @@ class MoondreamPipeline:
         try:
             return float(roughness_result), float(metalness_result)
         except ValueError:
+            print("Error: Could not convert roughness and metalness results to float, values are: ", roughness_result, metalness_result)
             return 0.5, 0.5

@@ -368,7 +368,7 @@ class Hunyuan3DPaintPipeline:
                 metallic_texture
             )
 
-            from .vlm.pipeline import MoondreamPipeline
+            from .vlm.pipelines import MoondreamPipeline
             moondream_pipeline = MoondreamPipeline.from_pretrained()
             roughness_factor, metallic_factor = moondream_pipeline(image_prompt)
 
