@@ -26,7 +26,6 @@
 import logging
 import os
 
-import cv2
 import numpy as np
 import torch
 from PIL import Image
@@ -192,7 +191,7 @@ class Hunyuan3DPaintPipeline:
         return new_image
 
     @torch.no_grad()
-    def __call__(self, mesh, image, upscale_model='Aura', enhance_texture_angles=False, pbr=False, debug=False):
+    def __call__(self, mesh, image, upscale_model=None, enhance_texture_angles=False, pbr=False, debug=False):
 
         if isinstance(image, str):
             image_prompt = Image.open(image)
@@ -369,18 +368,12 @@ class Hunyuan3DPaintPipeline:
                 metallic_texture
             )
 
-            raw_roughness_value = np.mean(roughness_texture)
-            raw_metalness_value = np.mean(metallic_texture)
+            from .vlm.pipeline import MoondreamPipeline
+            moondream_pipeline = MoondreamPipeline.from_pretrained()
+            roughness_factor, metallic_factor = moondream_pipeline(image_prompt)
 
-            material_type = self.estimate_material_type(image_prompt)
-            print(f"Estimated material type: {material_type}")
-
-            roughness_values = roughness_texture.flatten()
-            roughness_factor = self.calibrate_roughness(raw_roughness_value, material_type, roughness_values)
-            print(f"Calibrated roughness for {material_type}: {roughness_factor}")
-
-            metallic_factor = self.calibrate_metalness(raw_metalness_value, material_type)
-            print(f"Calibrated metallic for {material_type}: {metallic_factor}")
+            print(f"Raw roughness value: {roughness_factor}")
+            print(f"Raw metalness value: {metallic_factor}")
 
         mask_np = (mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
 
@@ -438,67 +431,3 @@ class Hunyuan3DPaintPipeline:
                 image_list.append(cropped)
 
         return image_list
-
-    @staticmethod
-    def estimate_material_type(albedo_image: Image.Image) -> str:
-        """
-        Estimate material type from an albedo image using HSV heuristics.
-        Returns one of: "metal", "wood", "plastic", or "rubber".
-        """
-        img_bgr = cv2.cvtColor(np.array(albedo_image), cv2.COLOR_RGB2BGR)
-
-        hsv = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2HSV)
-
-        avg_hue = np.mean(hsv[:, :, 0])
-        avg_sat = np.mean(hsv[:, :, 1])
-        avg_val = np.mean(hsv[:, :, 2])
-
-        print(f"Avg Hue: {avg_hue:.2f}, Saturation: {avg_sat:.2f}, Value: {avg_val:.2f}")
-        if 10 <= avg_hue <= 40 <= avg_sat and avg_val < 200:
-            return "wood"
-        if avg_sat < 40:
-            return "metal"
-        if avg_val < 80 and avg_sat < 100:
-            return "rubber"
-        return "plastic"
-
-    @staticmethod
-    def calibrate_roughness(raw_value, material_type, roughness_values):
-        """
-        Calibrate the raw roughness factor based on the material type and
-        the variance (standard deviation) of the roughness values.
-        """
-        std_val = np.std(roughness_values)
-        variance_factor = 1.0
-        if std_val > 0.05:
-            variance_factor = 1.1
-
-        if material_type == "metal":
-            calibrated = min(raw_value * variance_factor, 0.4)
-        elif material_type == "wood":
-            calibrated = max(raw_value * variance_factor, 0.6)
-        elif material_type == "plastic":
-            calibrated = raw_value
-        elif material_type == "rubber":
-            calibrated = max(raw_value * variance_factor, 0.8)
-        else:
-            calibrated = raw_value
-        return calibrated
-
-    @staticmethod
-    def calibrate_metalness(raw_value, material_type):
-        """
-        Calibrate the raw metallic factor based on the estimated material type.
-        """
-        if material_type == "metal":
-            calibrated = np.power(raw_value, 0.3) * 1.2
-            calibrated = min(calibrated, 1.0)
-        elif material_type == "wood":
-            calibrated = raw_value
-        elif material_type == "plastic":
-            calibrated = min(raw_value, 0.3)
-        elif material_type == "rubber":
-            calibrated = 0.0
-        else:
-            calibrated = raw_value
-        return calibrated
