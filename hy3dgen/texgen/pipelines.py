@@ -50,9 +50,10 @@ class Hunyuan3DTexGenConfig:
         self.candidate_camera_elevs = [0, 0, 0, 0, 90, -90]
         self.candidate_view_weights = [1, 0.1, 0.5, 0.1, 0.1, 0.1]
 
-        self.candidate_camera_azims_enhanced = [0, 90, 180, 270, 45, 135, 225, 315, 45, 135, 225, 315]
-        self.candidate_camera_elevs_enhanced = [0, 0, 0, 0, 45, 45, 45, 45, -45, -45, -45, -45]
-        self.candidate_view_weights_enhanced = [1, 0.1, 0.5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        self.candidate_camera_azims_enhanced = [0, 90, 180, 270, 0, 180, 90, 270, 45, 135, 225, 310, 45, 135, 225, 310]
+        self.candidate_camera_elevs_enhanced = [0, 0, 0, 0, 90, -90, -45, -45, 15, 15, 15, 15, -15, -15, -15, -15]
+        self.candidate_view_weights_enhanced = [1, 0.1, 0.5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1,
+                                                0.1]
 
         self.render_size = 2048
         self.texture_size = 1024
@@ -231,10 +232,11 @@ class Hunyuan3DPaintPipeline:
 
         if enhance_texture_angles:
             camera_info = [
-                (
-                        (((azim // 30) + 9) % 12) // {0: 1, 45: 3, -45: 3}[elev]
-                        + {0: 12, 45: 36, -45: 36}[elev]
-                )
+                (((azim // 30) + 9) % 12) // {
+                    -90: 3, -45: 3, -20: 1, -15: 1, 0: 1, 15: 1, 20: 1, 90: 3
+                }[elev] + {
+                    -90: 36, -45: 36, -20: 0, -15: 0, 0: 12, 15: 24, 20: 24, 90: 40
+                }[elev]
                 for azim, elev in
                 zip(self.config.candidate_camera_azims_enhanced, self.config.candidate_camera_elevs_enhanced)
             ]
