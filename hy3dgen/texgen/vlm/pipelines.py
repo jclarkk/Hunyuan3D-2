@@ -14,7 +14,7 @@ class MoondreamPipeline:
 
     def __call__(self, input_image: Image.Image) -> (float, float):
         # Inputs
-        prompt = 'What should be the {texture_type} intensity for this input image in a PBR texture map? Answer with a float value between 0 and 1'
+        prompt = 'Estimate the {texture_type} intensity for this input image as used in a PBR texture map. Provide a single float value between 0 and 1.'
         encoded_image = self.pipe.encode_image(input_image)
 
         roughness_prompt = prompt.format(texture_type="roughness")
