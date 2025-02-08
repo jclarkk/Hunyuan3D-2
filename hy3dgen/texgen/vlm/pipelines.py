@@ -13,12 +13,16 @@ class MoondreamPipeline:
         self.pipe = pipe
 
     def __call__(self, input_image: Image.Image) -> (float, float):
-        # Inputs
-        prompt = 'Estimate the {texture_type} intensity for this input image as used in a PBR texture map. Provide a single float value between 0 and 1.'
+        # Input
         encoded_image = self.pipe.encode_image(input_image)
 
-        roughness_prompt = prompt.format(texture_type="roughness")
-        metalness_prompt = prompt.format(texture_type="metalness")
+        # Prompts
+        roughness_prompt = "Estimate the roughness intensity for this input image as used in a PBR texture map. " \
+                            "Consider that highly reflective and smooth surfaces (like polished metal) should be closer to 0, " \
+                            "while rough, matte surfaces should be closer to 1. Provide a single float value between 0 and 1."
+        metalness_prompt = "Estimate the metalness intensity for this input image as used in a PBR texture map. " \
+                            "Consider that metals should have a value close to 1, while non-metallic materials (such as plastic, wood, or fabric) should be near 0. " \
+                            "Provide a single float value between 0 and 1."
 
         roughness_result = self.pipe.query(encoded_image, roughness_prompt)["answer"]
         metalness_result = self.pipe.query(encoded_image, metalness_prompt)["answer"]
