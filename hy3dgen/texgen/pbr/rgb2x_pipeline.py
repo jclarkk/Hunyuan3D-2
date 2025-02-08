@@ -807,6 +807,13 @@ class StableDiffusionAOVMatEstPipeline(
             if aov_name == "roughness" or aov_name == "metallic":
                 aov = aov[:, 0:1].repeat(1, 3, 1, 1)
 
+            if aov_name in ["roughness", "metallic"]:
+                # Apply contrast enhancement
+                contrast_factor = 2.0  # Adjust this factor to get the desired variance.
+                # Assuming aov is a torch tensor with values in [0,1]:
+                aov = (aov - 0.5) * contrast_factor + 0.5
+                aov = torch.clamp(aov, 0.0, 1.0)
+
             aov = self.image_processor.postprocess(
                 aov,
                 output_type=output_type,
