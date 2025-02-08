@@ -275,7 +275,7 @@ class Hunyuan3DPaintPipeline:
                     if debug:
                         rgb_img.save(f'debug_multiview_{i}_upscaled.png')
 
-                rgb_img = rgb_img.resize((self.config.texture_size, self.config.texture_size))
+                rgb_img = rgb_img.resize((self.config.render_size, self.config.render_size))
 
                 new_multiviews.append(rgb_img)
 
