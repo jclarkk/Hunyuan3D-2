@@ -1,5 +1,6 @@
 import argparse
 import os
+import sys
 import time
 import torch
 from PIL import Image
@@ -79,6 +80,7 @@ def run(args):
 
     print(f"Output saved to {args.output_dir}/{output_name}.glb")
     print(f"Total time taken: {t5 - t0:.2f} seconds")
+    sys.stdout.flush()
 
 
 if __name__ == "__main__":

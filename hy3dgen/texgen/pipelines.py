@@ -25,6 +25,7 @@
 
 import logging
 import os
+import time
 
 import numpy as np
 import torch
@@ -202,12 +203,18 @@ class Hunyuan3DPaintPipeline:
         image_prompt = self.recenter_image(image_prompt)
 
         print('Removing light and shadow...')
+        t0 = time.time()
         image_prompt = self.models['delight_model'](image_prompt)
+        t1 = time.time()
+        print(f"Light and shadow removal took {t1 - t0:.2f} seconds")
 
         del self.models['delight_model']
 
         print('Wrapping UV...')
+        t0 = time.time()
         mesh = mesh_uv_wrap(mesh)
+        t1 = time.time()
+        print(f"UV wrapping took {t1 - t0:.2f} seconds")
 
         self.render.load_mesh(mesh)
 
@@ -221,10 +228,13 @@ class Hunyuan3DPaintPipeline:
                  self.config.candidate_view_weights)
 
         print('Rendering normal maps...')
+        t0 = time.time()
         normal_maps = self.render_normal_multiview(
             selected_camera_elevs, selected_camera_azims, use_abs_coor=True)
         position_maps = self.render_position_multiview(
             selected_camera_elevs, selected_camera_azims)
+        t1 = time.time()
+        print(f"Rendering normal and position maps took {t1 - t0:.2f} seconds")
         if debug:
             for i in range(len(normal_maps)):
                 normal_maps[i].save(f'debug_normal_map_{i}.png')
@@ -246,7 +256,10 @@ class Hunyuan3DPaintPipeline:
                            zip(selected_camera_azims, selected_camera_elevs)]
 
         print('Generate multiviews...')
+        t0 = time.time()
         multiviews = self.models['multiview_model'](image_prompt, normal_maps + position_maps, camera_info)
+        t1 = time.time()
+        print(f"Generating multiviews took {t1 - t0:.2f} seconds")
 
         del self.models['multiview_model']
         torch.cuda.empty_cache()
@@ -262,6 +275,7 @@ class Hunyuan3DPaintPipeline:
 
         if upscaler is not None:
             print('Upscaler model loaded')
+            t0 = time.time()
 
             new_multiviews = []
 
@@ -286,6 +300,8 @@ class Hunyuan3DPaintPipeline:
 
             multiviews = new_multiviews
 
+            t1 = time.time()
+            print(f"Upscaling multiviews took {t1 - t0:.2f} seconds")
         else:
             for i in range(len(multiviews)):
                 multiviews[i] = multiviews[i].resize(
@@ -295,12 +311,16 @@ class Hunyuan3DPaintPipeline:
                     multiviews[i].save(f'debug_multiview_{i}.png')
 
         print('Baking texture...')
+        t0 = time.time()
         texture, mask = self.bake_from_multiview(multiviews,
                                                  selected_camera_elevs, selected_camera_azims, selected_view_weights,
                                                  method=self.config.merge_method)
+        t1 = time.time()
+        print(f"Texture baking took {t1 - t0:.2f} seconds")
 
         normal_texture, metallic_roughness_texture, metallic_factor, roughness_factor = None, None, None, None
         if pbr:
+            t0 = time.time()
             from .pbr.pipelines import RGB2XPipeline
             pbr_pipeline = RGB2XPipeline.from_pretrained(self.config.device)
 
@@ -377,10 +397,16 @@ class Hunyuan3DPaintPipeline:
             print(f"Raw roughness value: {roughness_factor}")
             print(f"Raw metalness value: {metallic_factor}")
 
+            t1 = time.time()
+            print(f"PBR texture baking took {t1 - t0:.2f} seconds")
+
         mask_np = (mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
 
         print('Inpainting texture...')
+        t0 = time.time()
         texture = self.texture_inpaint(texture, mask_np)
+        t1 = time.time()
+        print(f"Texture inpainting took {t1 - t0:.2f} seconds")
 
         self.render.set_texture(texture)
         textured_mesh = self.render.save_mesh(
