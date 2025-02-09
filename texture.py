@@ -17,14 +17,14 @@ def run(args):
     if args.prompt is not None and args.image_paths is not None:
         raise ValueError("Please provide either a prompt or an image, not both")
 
-    t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled')
-    texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2')
-
     if args.prompt is not None:
         t0 = time.time()
+        t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled')
         image = t2i_pipeline(args.prompt)
         t1 = time.time()
         print(f"Text to image took {t1 - t0:.2f} seconds")
+
+        del t2i_pipeline
     else:
         # Only one image supported right now
         image_path = args.image_paths[0]
@@ -40,7 +40,8 @@ def run(args):
 
     # Load mesh
     mesh = trimesh.load_mesh(args.mesh_path)
-    mesh = trimesh.util.concatenate(list(mesh.geometry.values()))
+    if isinstance(mesh, trimesh.Scene):
+        mesh = mesh.dump(concatenate=True)
 
     # Reduce face count
     if len(mesh.faces) > 100000:
@@ -51,6 +52,7 @@ def run(args):
 
     # Generate texture
     t4 = time.time()
+    texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2')
     mesh = texture_pipeline(
         mesh,
         image=image,
