@@ -211,8 +211,6 @@ class Hunyuan3DPaintPipeline:
         t1 = time.time()
         print(f"Light and shadow removal took {t1 - t0:.2f} seconds")
 
-        del self.models['delight_model']
-
         print('Wrapping UV...')
         t0 = time.time()
         mesh = mesh_uv_wrap(mesh)
@@ -263,9 +261,6 @@ class Hunyuan3DPaintPipeline:
         multiviews = self.models['multiview_model'](image_prompt, normal_maps + position_maps, camera_info)
         t1 = time.time()
         print(f"Generating multiviews took {t1 - t0:.2f} seconds")
-
-        del self.models['multiview_model']
-        torch.cuda.empty_cache()
 
         if upscale_model == 'Aura':
             upscaler = AuraSRUpscalerPipeline.from_pretrained()
