@@ -6,7 +6,7 @@ import torch
 from PIL import Image
 from uuid import uuid4
 
-from hy3dgen.rmbg import preprocess_image
+from hy3dgen.rmbg import RMBGRemover
 from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline, FaceReducer, FloaterRemover, DegenerateFaceRemover
 from hy3dgen.texgen import Hunyuan3DPaintPipeline
 
@@ -22,7 +22,8 @@ def run(args):
 
     # Preprocess the image
     image = Image.open(image_path)
-    image = preprocess_image(image)
+    rmbg_remover = RMBGRemover()
+    image = rmbg_remover(image)
 
     processed_image_name = os.path.basename(image_path).split('.')[0] + '_input.png'
     image.save(os.path.join(args.output_dir, processed_image_name))

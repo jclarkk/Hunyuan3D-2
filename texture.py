@@ -4,7 +4,7 @@ import time
 import trimesh
 from PIL import Image
 
-from hy3dgen.rmbg import preprocess_image
+from hy3dgen.rmbg import RMBGRemover
 from hy3dgen.shapegen.postprocessors import import_mesh, reduce_face
 from hy3dgen.texgen import Hunyuan3DPaintPipeline
 from hy3dgen.text2image import HunyuanDiTPipeline
@@ -33,7 +33,8 @@ def run(args):
     t0 = time.time()
 
     # Preprocess the image
-    image = preprocess_image(image)
+    rmbg_remover = RMBGRemover()
+    image = rmbg_remover(image)
 
     t1 = time.time()
     print(f"Image processing took {t1 - t0:.2f} seconds")
@@ -41,7 +42,7 @@ def run(args):
     # Load mesh
     mesh = trimesh.load_mesh(args.mesh_path)
     if isinstance(mesh, trimesh.Scene):
-        mesh = mesh.dump(concatenate=True)
+        mesh = mesh.to_geometry()
 
     # Reduce face count
     if len(mesh.faces) > 100000:

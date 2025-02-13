@@ -10,6 +10,8 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from hy3dgen.rmbg import RMBGRemover
+
 
 def get_example_img_list():
     print('Loading example img list ...')
@@ -85,13 +87,15 @@ def build_model_viewer_html(save_folder, height=660, width=790, textured=False):
 
 
 def _gen_shape(
-    caption,
-    image,
-    steps=50,
-    guidance_scale=7.5,
-    seed=1234,
-    octree_resolution=256,
-    check_box_rembg=False,
+        caption,
+        image,
+        steps=50,
+        guidance_scale=7.5,
+        seed=1234,
+        octree_resolution=256,
+        check_box_rembg=False,
+        im_remesh=False,
+        face_count=60000
 ):
     if caption: print('prompt is', caption)
     save_folder = gen_save_folder()
@@ -104,7 +108,8 @@ def _gen_shape(
         try:
             image = t2i_worker(caption)
         except Exception as e:
-            raise gr.Error(f"Text to 3D is disabled. Please enable it by restarted the app with `python gradio_app.py --enable_t23d`.")
+            raise gr.Error(
+                f"Text to 3D is disabled. Please enable it by restarted the app with `python gradio_app.py --enable_t23d`.")
         time_meta['text2image'] = time.time() - start_time
 
     image.save(os.path.join(save_folder, 'input.png'))
@@ -132,7 +137,7 @@ def _gen_shape(
 
     mesh = FloaterRemover()(mesh)
     mesh = DegenerateFaceRemover()(mesh)
-    mesh = FaceReducer()(mesh)
+    mesh = FaceReducer()(mesh, max_facenum=face_count, im_remesh=im_remesh)
 
     stats['number_of_faces'] = mesh.faces.shape[0]
     stats['number_of_vertices'] = mesh.vertices.shape[0]
@@ -144,13 +149,19 @@ def _gen_shape(
 
 
 def generation_all(
-    caption,
-    image,
-    steps=50,
-    guidance_scale=7.5,
-    seed=1234,
-    octree_resolution=256,
-    check_box_rembg=False
+        caption,
+        image,
+        steps=50,
+        guidance_scale=7.5,
+        seed=1234,
+        octree_resolution=256,
+        check_box_rembg=False,
+        im_remesh=False,
+        face_count=60000,
+        upscale_model='Aura',
+        enhance_texture_angles=False,
+        pbr=False,
+        texture_size=1024
 ):
     mesh, image, save_folder = _gen_shape(
         caption,
@@ -159,12 +170,21 @@ def generation_all(
         guidance_scale=guidance_scale,
         seed=seed,
         octree_resolution=octree_resolution,
-        check_box_rembg=check_box_rembg
+        check_box_rembg=check_box_rembg,
+        im_remesh=im_remesh,
+        face_count=face_count
     )
     path = export_mesh(mesh, save_folder, textured=False)
     model_viewer_html = build_model_viewer_html(save_folder, height=596, width=700)
 
-    textured_mesh = texgen_worker(mesh, image)
+    textured_mesh = texgen_worker(
+        mesh,
+        image,
+        upscale_model=upscale_model,
+        enhance_texture_angles=enhance_texture_angles,
+        pbr=pbr,
+        texture_size=texture_size
+    )
     path_textured = export_mesh(textured_mesh, save_folder, textured=True)
     model_viewer_html_textured = build_model_viewer_html(save_folder, height=596, width=700, textured=True)
 
@@ -177,14 +197,17 @@ def generation_all(
 
 
 def shape_generation(
-    caption,
-    image,
-    steps=50,
-    guidance_scale=7.5,
-    seed=1234,
-    octree_resolution=256,
-    check_box_rembg=False,
+        caption,
+        image,
+        steps=50,
+        guidance_scale=7.5,
+        seed=1234,
+        octree_resolution=256,
+        check_box_rembg=False,
+        im_remesh=False,
+        face_count=60000
 ):
+    print('Generating shape ...')
     mesh, image, save_folder = _gen_shape(
         caption,
         image,
@@ -192,7 +215,9 @@ def shape_generation(
         guidance_scale=guidance_scale,
         seed=seed,
         octree_resolution=octree_resolution,
-        check_box_rembg=check_box_rembg
+        check_box_rembg=check_box_rembg,
+        im_remesh=im_remesh,
+        face_count=face_count
     )
 
     path = export_mesh(mesh, save_folder, textured=False)
@@ -207,7 +232,6 @@ def shape_generation(
 def build_app():
     title_html = """
     <div style="font-size: 2em; font-weight: bold; text-align: center; margin-bottom: 5px">
-
     Hunyuan3D-2: Scaling Diffusion Models for High Resolution Textured 3D Assets Generation
     </div>
     <div align="center">
@@ -218,6 +242,17 @@ def build_app():
       <a href="http://3d-models.hunyuan.tencent.com">Homepage</a> &ensp;
       <a href="#">Technical Report</a> &ensp;
       <a href="https://huggingface.co/Tencent/Hunyuan3D-2"> Models</a> &ensp;
+    </div>
+    <div style="text-align: center; margin-top: 10px; font-size: 1.2em;">
+    <strong>Enhanced Edition</strong><br>
+    Quad Remeshing using InstantMeshes<br>
+    Added face count, texture resolution options<br><br>
+    Super resolution - AuraSR-V2 / InvSR (SD-Turbo) / Flux Controlnet<br>
+    Installation instructions:<br>
+    <code>hy3dgen/texgen/upscalers/README.md</code><br><br>
+    PBR - based on rgbx (<a href="https://github.com/zheng95z/rgbx">https://github.com/zheng95z/rgbx</a>)<br>
+    Installation Instructions:<br>
+    <code>hy3dgen/texgen/pbr/README.md</code>
     </div>
     """
 
@@ -242,6 +277,18 @@ def build_app():
                     octree_resolution = gr.Dropdown([256, 384, 512], value=256, label='Octree Resolution')
                     cfg_scale = gr.Number(value=5.5, label='Guidance Scale')
                     seed = gr.Slider(maximum=1e7, minimum=0, value=1234, label='Seed')
+
+                    with gr.Row():
+                        instant_meshes = gr.Checkbox(label='InstantMeshes QuadRemesh', value=False)
+                        texture_size = gr.Slider(minimum=1024, maximum=2048, step=1024, value=1024,
+                                                 label='Texture Resolution')
+                        enhance_texture = gr.Checkbox(label='Enhance Texture Angles', value=False)
+                        pbr = gr.Checkbox(label='PBR Texture (Experimental, use the README in folder)', value=False)
+
+                    face_count = gr.Slider(minimum=1000, maximum=100000, step=1000, value=50000, label='Face Count')
+                    super_resolution = gr.Radio(['None', 'Aura', 'InvSR', 'Flux'],
+                                                label='Super-Resolution (Install the method required, use README in folder)',
+                                                value='Aura')
 
                 with gr.Group():
                     btn = gr.Button(value='Generate Shape Only', variant='primary')
@@ -300,6 +347,8 @@ def build_app():
                 seed,
                 octree_resolution,
                 check_box_rembg,
+                instant_meshes,
+                face_count
             ],
             outputs=[file_out, html_output1]
         ).then(
@@ -317,6 +366,10 @@ def build_app():
                 seed,
                 octree_resolution,
                 check_box_rembg,
+                super_resolution,
+                enhance_texture,
+                pbr,
+                texture_size
             ],
             outputs=[file_out, file_out2, html_output1, html_output2]
         ).then(
@@ -374,9 +427,8 @@ if __name__ == '__main__':
 
     from hy3dgen.shapegen import FaceReducer, FloaterRemover, DegenerateFaceRemover, \
         Hunyuan3DDiTFlowMatchingPipeline
-    from hy3dgen.rembg import BackgroundRemover
 
-    rmbg_worker = BackgroundRemover()
+    rmbg_worker = RMBGRemover()
     i23d_worker = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained('tencent/Hunyuan3D-2')
     floater_remove_worker = FloaterRemover()
     degenerate_face_remove_worker = DegenerateFaceRemover()

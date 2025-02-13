@@ -193,7 +193,9 @@ class Hunyuan3DPaintPipeline:
         return new_image
 
     @torch.no_grad()
-    def __call__(self, mesh, image, upscale_model=None, enhance_texture_angles=False, pbr=False, debug=False):
+    def __call__(self, mesh, image, upscale_model=None, enhance_texture_angles=False, pbr=False, debug=False, texture_size=1024):
+        self.config.texture_size = texture_size
+        self.render.set_default_texture_resolution(texture_size)
 
         if isinstance(image, str):
             image_prompt = Image.open(image)
