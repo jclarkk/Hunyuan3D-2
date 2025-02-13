@@ -366,6 +366,8 @@ def build_app():
                 seed,
                 octree_resolution,
                 check_box_rembg,
+                instant_meshes,
+                face_count,
                 super_resolution,
                 enhance_texture,
                 pbr,
