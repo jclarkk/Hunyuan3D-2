@@ -34,6 +34,7 @@ from PIL import Image
 from .differentiable_renderer.mesh_render import MeshRender
 from .upscalers.pipelines import AuraSRUpscalerPipeline, InvSRUpscalerPipeline, FluxUpscalerPipeline
 from .utils.dehighlight_utils import Light_Shadow_Remover
+from .utils.imagesuper_utils import Image_Super_Net
 from .utils.multiview_utils import Multiview_Diffusion_Net
 from .utils.uv_warp_utils import mesh_uv_wrap
 
@@ -272,6 +273,8 @@ class Hunyuan3DPaintPipeline:
             upscaler = InvSRUpscalerPipeline.from_pretrained(self.config.device)
         elif upscale_model == 'Flux':
             upscaler = FluxUpscalerPipeline.from_pretrained(self.config.device)
+        elif upscale_model == 'SD-Upscaler':
+            upscaler = Image_Super_Net(self.config.device)
         else:
             upscaler = None
 

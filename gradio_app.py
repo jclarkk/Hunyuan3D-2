@@ -247,7 +247,7 @@ def build_app():
     <strong>Enhanced Edition</strong><br>
     Quad Remeshing using InstantMeshes<br>
     Added face count, texture resolution options<br><br>
-    Super resolution - AuraSR-V2 / InvSR (SD-Turbo) / Flux Controlnet<br>
+    Super resolution - AuraSR-V2 / InvSR (SD-Turbo) / Flux Controlnet / SD-Upscaler<br>
     Installation instructions:<br>
     <code>hy3dgen/texgen/upscalers/README.md</code><br><br>
     PBR - based on rgbx (<a href="https://github.com/zheng95z/rgbx">https://github.com/zheng95z/rgbx</a>)<br>
@@ -286,7 +286,7 @@ def build_app():
                         pbr = gr.Checkbox(label='PBR Texture (Experimental, use the README in folder)', value=False)
 
                     face_count = gr.Slider(minimum=1000, maximum=100000, step=1000, value=50000, label='Face Count')
-                    super_resolution = gr.Radio(['None', 'Aura', 'InvSR', 'Flux'],
+                    super_resolution = gr.Radio(['None', 'Aura', 'InvSR', 'Flux', 'SD-Upscaler'],
                                                 label='Super-Resolution (Install the method required, use README in folder)',
                                                 value='Aura')
 
