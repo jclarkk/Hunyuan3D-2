@@ -10,6 +10,8 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
+from mmgp import offload
+
 from hy3dgen.rmbg import RMBGRemover
 
 
@@ -244,15 +246,29 @@ def build_app():
       <a href="https://huggingface.co/Tencent/Hunyuan3D-2"> Models</a> &ensp;
     </div>
     <div style="text-align: center; margin-top: 10px; font-size: 1.2em;">
-    <strong>Enhanced Edition</strong><br>
-    Quad Remeshing using InstantMeshes<br>
-    Added face count, texture resolution options<br><br>
-    Super resolution - AuraSR-V2 / InvSR (SD-Turbo) / Flux Controlnet / SD-Upscaler<br>
-    Installation instructions:<br>
-    <code>hy3dgen/texgen/upscalers/README.md</code><br><br>
-    PBR - based on rgbx (<a href="https://github.com/zheng95z/rgbx">https://github.com/zheng95z/rgbx</a>)<br>
-    Installation Instructions:<br>
-    <code>hy3dgen/texgen/pbr/README.md</code>
+    <!-- Enhanced Edition Section -->
+    <div class="bg-gray-50 rounded-lg p-8 mb-12">
+        <h2 class="text-2xl font-bold text-center mb-6 text-gray-800">Enhanced Edition Features</h2>
+        
+        <div class="space-y-6">
+            <div class="space-y-2">
+                <h3 class="font-semibold text-lg text-gray-700">Mesh Improvements</h3>
+                <p class="text-gray-600">• Quad Remeshing using InstantMeshes</p>
+                <p class="text-gray-600">• Added face count and texture resolution options</p>
+            </div>
+
+            <div class="space-y-2">
+                <h3 class="font-semibold text-lg text-gray-700">Super Resolution</h3>
+                <p class="text-gray-600">AuraSR-V2 / InvSR (SD-Turbo) / Flux Controlnet / SD-Upscaler</p>
+                <p class="text-gray-500 text-sm">Installation: <code class="bg-gray-100 px-2 py-1 rounded">hy3dgen/texgen/upscalers/README.md</code></p>
+            </div>
+
+            <div class="space-y-2">
+                <h3 class="font-semibold text-lg text-gray-700">PBR Implementation</h3>
+                <p class="text-gray-600">Based on <a href="https://github.com/zheng95z/rgbx" class="text-blue-600 hover:text-blue-800">rgbx</a></p>
+                <p class="text-gray-500 text-sm">Installation: <code class="bg-gray-100 px-2 py-1 rounded">hy3dgen/texgen/pbr/README.md</code></p>
+            </div>
+        </div>
     </div>
     """
 
@@ -390,6 +406,8 @@ if __name__ == '__main__':
     parser.add_argument('--host', type=str, default='0.0.0.0')
     parser.add_argument('--cache-path', type=str, default='gradio_cache')
     parser.add_argument('--enable_t23d', action='store_true')
+    parser.add_argument('--profile', type=str, default="3")
+    parser.add_argument('--verbose', type=str, default="1")
     args = parser.parse_args()
 
     SAVE_DIR = args.cache_path
@@ -408,6 +426,7 @@ if __name__ == '__main__':
     """
     example_is = get_example_img_list()
     example_ts = get_example_txt_list()
+    torch.set_default_device("cpu")
 
     try:
         from hy3dgen.texgen import Hunyuan3DPaintPipeline
@@ -431,10 +450,29 @@ if __name__ == '__main__':
         Hunyuan3DDiTFlowMatchingPipeline
 
     rmbg_worker = RMBGRemover()
-    i23d_worker = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained('tencent/Hunyuan3D-2')
+    i23d_worker = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
+        'tencent/Hunyuan3D-2',
+        device="cpu",
+        use_safetensors=True)
     floater_remove_worker = FloaterRemover()
     degenerate_face_remove_worker = DegenerateFaceRemover()
     face_reduce_worker = FaceReducer()
+
+    profile = int(args.profile)
+    kwargs = {}
+    pipe = offload.extract_models("i23d_worker", i23d_worker)
+    if HAS_TEXTUREGEN:
+        pipe.update(offload.extract_models("texgen_worker", texgen_worker))
+        texgen_worker.models["multiview_model"].pipeline.vae.use_slicing = True
+    if HAS_T2I:
+        pipe.update(offload.extract_models("t2i_worker", t2i_worker))
+
+    if profile < 5:
+        kwargs["pinnedMemory"] = "i23d_worker/model"
+    if profile != 1 and profile != 3:
+        kwargs["budgets"] = {"*": 2200}
+
+    offload.profile(pipe, profile_no=profile, verboseLevel=int(args.verbose), **kwargs)
 
     # https://discuss.huggingface.co/t/how-to-serve-an-html-file/33921/2
     # create a FastAPI app
