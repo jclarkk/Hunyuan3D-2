@@ -4,6 +4,7 @@ import sys
 import time
 import torch
 from PIL import Image
+from mmgp import offload
 from uuid import uuid4
 
 from hy3dgen.rmbg import RMBGRemover
@@ -45,6 +46,24 @@ def run(args):
         )
     print('3D DiT pipeline loaded')
 
+    profile = int(args.profile)
+    kwargs = {}
+    pipe = offload.extract_models("mesh_worker", mesh_pipeline)
+
+    if args.texture:
+        texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2')
+        print('3D Paint pipeline loaded')
+
+        pipe.update(offload.extract_models("texgen_worker", texture_pipeline))
+        texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
+
+    if profile < 5:
+        kwargs["pinnedMemory"] = "i23d_worker/model"
+    if profile != 1 and profile != 3:
+        kwargs["budgets"] = {"*": 2200}
+
+    offload.profile(pipe, profile_no=profile, verboseLevel=int(args.verbose), **kwargs)
+
     # Generate mesh
     t2 = time.time()
     mesh = mesh_pipeline(image=image, num_inference_steps=30, mc_algo='mc',
@@ -59,9 +78,6 @@ def run(args):
     if args.texture:
         del mesh_pipeline
         torch.cuda.empty_cache()
-
-        texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2')
-        print('3D Paint pipeline loaded')
 
         t4 = time.time()
         mesh = texture_pipeline(mesh, image=image)
@@ -95,6 +111,8 @@ if __name__ == "__main__":
     parser.add_argument('--im_remesh', action='store_true', help='Remesh using InstantMeshes', default=False)
     parser.add_argument('--face_count', type=int, default=100000, help='Maximum face count for the mesh')
     parser.add_argument('--texture', action='store_true', help='Texture the mesh', default=False)
+    parser.add_argument('--profile', type=str, default="3")
+    parser.add_argument('--verbose', type=str, default="1")
 
     args = parser.parse_args()
 
