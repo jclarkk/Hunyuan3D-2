@@ -46,6 +46,9 @@ class RMBGRemover:
         output = input
         # Crop and resize based on alpha channel after background removal
         output_np = np.array(output)
+        # Ensure the image is in RGBA mode before accessing the alpha channel
+        if output.mode != 'RGBA':
+            output = output.convert('RGBA')
         alpha = output_np[:, :, 3]
         bbox = np.argwhere(alpha > 0.8 * 255)
         bbox = np.min(bbox[:, 1]), np.min(bbox[:, 0]), np.max(bbox[:, 1]), np.max(bbox[:, 0])
