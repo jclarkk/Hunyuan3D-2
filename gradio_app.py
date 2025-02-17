@@ -159,14 +159,16 @@ def generation_all(
         seed=1234,
         octree_resolution=256,
         check_box_rembg=False,
-        im_remesh=False,
-        bpt_remesh=False,
+        remesh_type='None',
         face_count=60000,
         upscale_model='Aura',
         enhance_texture_angles=False,
         pbr=False,
         texture_size=1024
 ):
+    im_remesh = remesh_type == "InstantMeshes"
+    bpt_remesh = remesh_type == "BPT"
+
     mesh, image, save_folder = _gen_shape(
         caption,
         image,
@@ -209,11 +211,14 @@ def shape_generation(
         seed=1234,
         octree_resolution=256,
         check_box_rembg=False,
-        im_remesh=False,
-        bpt_remesh=False,
+        remesh_type='None',
         face_count=60000
 ):
     print('Generating shape ...')
+
+    im_remesh = remesh_type == "InstantMeshes"
+    bpt_remesh = remesh_type == "BPT"
+
     mesh, image, save_folder = _gen_shape(
         caption,
         image,
@@ -368,8 +373,7 @@ def build_app():
                 seed,
                 octree_resolution,
                 check_box_rembg,
-                remesh_type == 'InstantMeshes',
-                remesh_type == 'BPT',
+                remesh_type,
                 face_count
             ],
             outputs=[file_out, html_output1]
@@ -388,8 +392,7 @@ def build_app():
                 seed,
                 octree_resolution,
                 check_box_rembg,
-                remesh_type == 'InstantMeshes',
-                remesh_type == 'BPT',
+                remesh_type,
                 face_count,
                 super_resolution,
                 enhance_texture,
