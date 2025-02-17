@@ -41,6 +41,7 @@
 ## 🔧 Modified section
 
 #### * InstantMeshes quad re-meshing in CLI and gradio app
+#### * BPT Retopology for mesh simplification
 #### * Super resolution for texture generation:
 <h5 style="text-align:center;">AuraSR-v2 (GAN) - fastest</h3>
 <h5 style="text-align:center;">InvSR (SD-Turbo, custom diffusers installation) - Best overall</h3>

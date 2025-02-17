@@ -97,6 +97,7 @@ def _gen_shape(
         octree_resolution=256,
         check_box_rembg=False,
         im_remesh=False,
+        bpt_remesh=False,
         face_count=60000
 ):
     if caption: print('prompt is', caption)
@@ -139,7 +140,7 @@ def _gen_shape(
 
     mesh = FloaterRemover()(mesh)
     mesh = DegenerateFaceRemover()(mesh)
-    mesh = FaceReducer()(mesh, max_facenum=face_count, im_remesh=im_remesh)
+    mesh = FaceReducer()(mesh, max_facenum=face_count, im_remesh=im_remesh, bpt_remesh=bpt_remesh)
 
     stats['number_of_faces'] = mesh.faces.shape[0]
     stats['number_of_vertices'] = mesh.vertices.shape[0]
@@ -207,6 +208,7 @@ def shape_generation(
         octree_resolution=256,
         check_box_rembg=False,
         im_remesh=False,
+        bpt_remesh=False,
         face_count=60000
 ):
     print('Generating shape ...')
@@ -219,6 +221,7 @@ def shape_generation(
         octree_resolution=octree_resolution,
         check_box_rembg=check_box_rembg,
         im_remesh=im_remesh,
+        bpt_remesh=bpt_remesh,
         face_count=face_count
     )
 
@@ -295,7 +298,7 @@ def build_app():
                     seed = gr.Slider(maximum=1e7, minimum=0, value=1234, label='Seed')
 
                     with gr.Row():
-                        instant_meshes = gr.Checkbox(label='InstantMeshes QuadRemesh', value=False)
+                        remesh_type = gr.Radio(['InstantMeshes', 'BPT', 'None'], label='Remesh Type', value='None')
                         texture_size = gr.Slider(minimum=1024, maximum=2048, step=1024, value=1024,
                                                  label='Texture Resolution')
                         enhance_texture = gr.Checkbox(label='Enhance Texture Angles', value=False)
@@ -363,7 +366,8 @@ def build_app():
                 seed,
                 octree_resolution,
                 check_box_rembg,
-                instant_meshes,
+                remesh_type == 'InstantMeshes',
+                remesh_type == 'BPT',
                 face_count
             ],
             outputs=[file_out, html_output1]

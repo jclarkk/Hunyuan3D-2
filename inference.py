@@ -16,6 +16,9 @@ def run(args):
     if args.face_count > 100000:
         raise ValueError("Face count must be less than or equal to 100000")
 
+    if args.im_remesh and args.bpt_remesh:
+        raise ValueError("Only one re-meshing method can be selected")
+
     # Only one image supported right now
     image_path = args.image_paths[0]
 
@@ -70,7 +73,7 @@ def run(args):
                          generator=torch.manual_seed(args.seed))[0]
     mesh = FloaterRemover()(mesh)
     mesh = DegenerateFaceRemover()(mesh)
-    mesh = FaceReducer()(mesh, max_facenum=args.face_count, im_remesh=args.im_remesh)
+    mesh = FaceReducer()(mesh, max_facenum=args.face_count, im_remesh=args.im_remesh, bpt_remesh=args.bpt_remesh)
     t3 = time.time()
     print(f"Mesh generation took {t3 - t2:.2f} seconds")
 
@@ -109,6 +112,7 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, default=0, help='Seed for the random number generator')
     parser.add_argument('--fast', action='store_true', help='Use fast mode', default=False)
     parser.add_argument('--im_remesh', action='store_true', help='Remesh using InstantMeshes', default=False)
+    parser.add_argument('--bpt_remesh', action='store_true', help='Remesh using BPT', default=False)
     parser.add_argument('--face_count', type=int, default=100000, help='Maximum face count for the mesh')
     parser.add_argument('--texture', action='store_true', help='Texture the mesh', default=False)
     parser.add_argument('--profile', type=str, default="3")
