@@ -322,7 +322,7 @@ class Hunyuan3DPaintPipeline:
         if pbr:
             t0 = time.time()
             from .pbr.pipelines import RGB2XPipeline
-            pbr_pipeline = RGB2XPipeline.from_pretrained(self.config.device)
+            pbr_pipeline = RGB2XPipeline.from_pretrained("cuda")
 
             # Do it in batches of 6
             pre_pbr_multiviews = [view.resize((1024, 1024)) for view in multiviews[:6]]

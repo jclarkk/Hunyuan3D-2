@@ -6,7 +6,7 @@ from PIL import Image
 from mmgp import offload
 
 from hy3dgen.rmbg import RMBGRemover
-from hy3dgen.shapegen.postprocessors import import_mesh, reduce_face
+from hy3dgen.shapegen.postprocessors import import_mesh, reduce_face, FaceReducer
 from hy3dgen.texgen import Hunyuan3DPaintPipeline
 from hy3dgen.text2image import HunyuanDiTPipeline
 
@@ -69,6 +69,9 @@ def run(args):
         current_mesh = ms.current_mesh()
         mesh = trimesh.Trimesh(vertices=current_mesh.vertex_matrix(), faces=current_mesh.face_matrix())
 
+    if args.bpt_remesh:
+        mesh = FaceReducer()(mesh, max_facenum=args.face_count, bpt_remesh=args.bpt_remesh)
+
         # Check if face count is still too high
         if len(mesh.faces) > 100000:
             raise ValueError("Face count must be less than or equal to 100000")
@@ -109,6 +112,7 @@ if __name__ == "__main__":
     parser.add_argument('--upscale_model', type=str, default=None, help='Upscale model to use')
     parser.add_argument('--enhance_texture_angles', action='store_true', help='Enhance texture angles', default=False)
     parser.add_argument('--pbr', action='store_true', help='Generate PBR textures', default=False)
+    parser.add_argument('--bpt_remesh', action='store_true', help='Remesh using BPT', default=False)
     parser.add_argument('--debug', action='store_true', help='Debug mode', default=False)
     parser.add_argument('--profile', type=str, default="3")
     parser.add_argument('--verbose', type=str, default="1")
