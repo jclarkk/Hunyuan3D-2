@@ -160,6 +160,7 @@ def generation_all(
         octree_resolution=256,
         check_box_rembg=False,
         im_remesh=False,
+        bpt_remesh=False,
         face_count=60000,
         upscale_model='Aura',
         enhance_texture_angles=False,
@@ -175,6 +176,7 @@ def generation_all(
         octree_resolution=octree_resolution,
         check_box_rembg=check_box_rembg,
         im_remesh=im_remesh,
+        bpt_remesh=bpt_remesh,
         face_count=face_count
     )
     path = export_mesh(mesh, save_folder, textured=False)
@@ -298,12 +300,12 @@ def build_app():
                     seed = gr.Slider(maximum=1e7, minimum=0, value=1234, label='Seed')
 
                     with gr.Row():
-                        remesh_type = gr.Radio(['InstantMeshes', 'BPT', 'None'], label='Remesh Type', value='None')
                         texture_size = gr.Slider(minimum=1024, maximum=2048, step=1024, value=1024,
                                                  label='Texture Resolution')
                         enhance_texture = gr.Checkbox(label='Enhance Texture Angles', value=False)
                         pbr = gr.Checkbox(label='PBR Texture (Experimental, use the README in folder)', value=False)
 
+                    remesh_type = gr.Radio(['InstantMeshes', 'BPT', 'None'], label='Remesh Type', value='None')
                     face_count = gr.Slider(minimum=1000, maximum=100000, step=1000, value=50000, label='Face Count')
                     super_resolution = gr.Radio(['None', 'Aura', 'InvSR', 'Flux', 'SD-Upscaler'],
                                                 label='Super-Resolution (Install the method required, use README in folder)',
@@ -386,7 +388,8 @@ def build_app():
                 seed,
                 octree_resolution,
                 check_box_rembg,
-                instant_meshes,
+                remesh_type == 'InstantMeshes',
+                remesh_type == 'BPT',
                 face_count,
                 super_resolution,
                 enhance_texture,
