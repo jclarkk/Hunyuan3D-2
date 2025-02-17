@@ -263,7 +263,7 @@ def build_app():
         <div class="space-y-6">
             <div class="space-y-2">
                 <h3 class="font-semibold text-lg text-gray-700">Mesh Improvements</h3>
-                <p class="text-gray-600">• Quad Remeshing using InstantMeshes</p>
+                <p class="text-gray-600">• Quad Remeshing using InstantMeshes or BPT</p>
                 <p class="text-gray-600">• Added face count and texture resolution options</p>
             </div>
 
