@@ -1,3 +1,9 @@
+try:
+    # If using Blender's uv unwrap then we must initialize bpy
+    import bpy
+except ImportError:
+    pass
+
 import argparse
 import os
 import sys
@@ -83,7 +89,7 @@ def run(args):
         torch.cuda.empty_cache()
 
         t4 = time.time()
-        mesh = texture_pipeline(mesh, image=image)
+        mesh = texture_pipeline(mesh, image=image, bpy_uv_unwrap=args.bpy_uv_unwrap)
         t5 = time.time()
         print(f"Texture generation took {t5 - t4:.2f} seconds")
     else:
@@ -114,6 +120,7 @@ if __name__ == "__main__":
     parser.add_argument('--im_remesh', action='store_true', help='Remesh using InstantMeshes', default=False)
     parser.add_argument('--bpt_remesh', action='store_true', help='Remesh using BPT', default=False)
     parser.add_argument('--face_count', type=int, default=100000, help='Maximum face count for the mesh')
+    parser.add_argument('--bpy_uv_unwrap', action='store_true', help='Use Blender UV unwrap', default=False)
     parser.add_argument('--texture', action='store_true', help='Texture the mesh', default=False)
     parser.add_argument('--profile', type=str, default="3")
     parser.add_argument('--verbose', type=str, default="1")

@@ -1,3 +1,4 @@
+import math
 import torch
 from torch import nn, Tensor
 from torch.nn import Module
@@ -179,7 +180,7 @@ class MeshTransformer(Module):
         curr_length = codes.shape[-1]
 
         cache = None
-
+        eos_iter = None
         # predict tokens auto-regressively
         for i in tqdm(range(curr_length, max_seq_len), position=tqdm_position, 
                       desc=f'Process: {tqdm_position}', dynamic_ncols=True, leave=False):
@@ -195,23 +196,25 @@ class MeshTransformer(Module):
 
             if cache_kv:
                 logits, cache = output
-
             else:
                 logits = output
 
             # sample code from logits
             logits = logits[:, -1]
             filtered_logits = filter_logits_fn(logits, **filter_kwargs)
-            probs = F.softmax(filtered_logits / temperature, dim = -1)
+            probs = F.softmax(filtered_logits / temperature, dim=-1)
             sample = torch.multinomial(probs, 1)
             codes, _ = pack([codes, sample], 'b *')
 
-            # check for all rows to have [eos] to terminate
-
+            # Check if all sequences have encountered EOS at least once
             is_eos_codes = (codes == self.eos_token_id)
-
-            if is_eos_codes.any(dim = -1).all():
-                break
+            if is_eos_codes.any(dim=-1).all():
+                # Record the iteration (i.e. current sequence length) when EOS is first detected in all sequences
+                if eos_iter is None:
+                    eos_iter = codes.shape[-1]
+                # Once we've generated 20% more tokens than eos_iter, break out of the loop
+                if codes.shape[-1] >= int(eos_iter * 1.2):
+                    break
 
         # mask out to padding anything after the first eos
 

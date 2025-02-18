@@ -36,7 +36,7 @@ from .upscalers.pipelines import AuraSRUpscalerPipeline, InvSRUpscalerPipeline, 
 from .utils.dehighlight_utils import Light_Shadow_Remover
 from .utils.imagesuper_utils import Image_Super_Net
 from .utils.multiview_utils import Multiview_Diffusion_Net
-from .utils.uv_warp_utils import mesh_uv_wrap
+from .utils.uv_warp_utils import mesh_uv_wrap, bpy_unwrap_mesh
 
 logger = logging.getLogger(__name__)
 
@@ -194,7 +194,15 @@ class Hunyuan3DPaintPipeline:
         return new_image
 
     @torch.no_grad()
-    def __call__(self, mesh, image, upscale_model=None, enhance_texture_angles=False, pbr=False, debug=False, texture_size=1024):
+    def __call__(self,
+                 mesh,
+                 image,
+                 bpy_uv_unwrap=False,
+                 upscale_model=None,
+                 enhance_texture_angles=False,
+                 pbr=False,
+                 debug=False,
+                 texture_size=1024):
         self.config.texture_size = texture_size
         self.render.set_default_texture_resolution(texture_size)
 
@@ -213,7 +221,10 @@ class Hunyuan3DPaintPipeline:
 
         print('Wrapping UV...')
         t0 = time.time()
-        mesh = mesh_uv_wrap(mesh)
+        if bpy_uv_unwrap:
+            mesh = bpy_unwrap_mesh(mesh)
+        else:
+            mesh = mesh_uv_wrap(mesh)
         t1 = time.time()
         print(f"UV wrapping took {t1 - t0:.2f} seconds")
 

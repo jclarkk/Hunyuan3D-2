@@ -42,13 +42,15 @@ def mesh_uv_wrap(mesh):
     return mesh
 
 
-def bpy_unwrap_mesh(vertices, faces):
+def bpy_unwrap_mesh(mesh):
+    vertices = mesh.vertices
+    faces = mesh.faces
     import bpy
     import bmesh
     import numpy as np
     # Create a new mesh and object
-    mesh = bpy.data.meshes.new(name="TempMesh")
-    obj = bpy.data.objects.new(name="TempObject", object_data=mesh)
+    bpy_mesh = bpy.data.meshes.new(name="TempMesh")
+    obj = bpy.data.objects.new(name="TempObject", object_data=bpy_mesh)
 
     # Link the object to the scene
     bpy.context.collection.objects.link(obj)
@@ -67,7 +69,7 @@ def bpy_unwrap_mesh(vertices, faces):
         bm.faces.new([vert_list[i] for i in f])
 
     # Write the BMesh to the mesh data
-    bm.to_mesh(mesh)
+    bm.to_mesh(bpy_mesh)
     bm.free()
 
     # Enter edit mode to unwrap
@@ -76,11 +78,13 @@ def bpy_unwrap_mesh(vertices, faces):
     bpy.ops.object.mode_set(mode='OBJECT')
 
     # Extract UV coordinates
-    uv_layer = mesh.uv_layers.active.data
+    uv_layer = bpy_mesh.uv_layers.active.data
     uvs = np.array([uv.uv for uv in uv_layer], dtype=np.float32)
 
     # Cleanup: Remove the temporary object from the scene
     bpy.data.objects.remove(obj)
-    bpy.data.meshes.remove(mesh)
+    bpy.data.meshes.remove(bpy_mesh)
 
-    return uvs
+    mesh.visual.uv = uvs
+
+    return mesh
