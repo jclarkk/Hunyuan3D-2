@@ -208,8 +208,7 @@ class MeshTransformer(Module):
 
             # Check if all sequences have encountered EOS at least once
             is_eos_codes = (codes == self.eos_token_id)
-            if is_eos_codes.any(dim=-1).all():
-                # Record the iteration (i.e. current sequence length) when EOS is first detected in all sequences
+            if (codes == self.eos_token_id).cpu().any(dim=-1).all():
                 if eos_iter is None:
                     eos_iter = codes.shape[-1]
                 # Once we've generated 20% more tokens than eos_iter, break out of the loop
