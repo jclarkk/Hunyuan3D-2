@@ -31,10 +31,6 @@ import torch
 import trimesh
 from typing import Union
 
-from .bpt.model import data_utils
-from .bpt.model.model import MeshTransformer
-from .bpt.model.serializaiton import BPT_deserialize
-from .bpt.utils import sample_pc, joint_filter
 from .models.vae import Latent2MeshOutput
 
 
@@ -175,6 +171,11 @@ class FaceReducer:
         return mesh
 
     def bpt_remesh(self, mesh: trimesh.Trimesh, verbose: bool = False):
+        from .bpt.model import data_utils
+        from .bpt.model.model import MeshTransformer
+        from .bpt.model.serializaiton import BPT_deserialize
+        from .bpt.utils import sample_pc, joint_filter
+
         pc_normal = sample_pc(mesh, pc_num=8192, with_normal=True)
 
         pc_normal = pc_normal[None, :, :] if len(pc_normal.shape) == 2 else pc_normal
