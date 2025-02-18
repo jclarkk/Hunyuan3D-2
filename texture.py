@@ -76,7 +76,7 @@ def run(args):
         mesh = trimesh.Trimesh(vertices=current_mesh.vertex_matrix(), faces=current_mesh.face_matrix())
 
     if args.bpt_remesh:
-        mesh = FaceReducer()(mesh, max_facenum=args.face_count, bpt_remesh=args.bpt_remesh)
+        mesh = FaceReducer()(mesh, bpt_remesh=args.bpt_remesh)
 
         # Check if face count is still too high
         if len(mesh.faces) > 100000:
