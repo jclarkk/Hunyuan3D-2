@@ -48,6 +48,7 @@ def bpy_unwrap_mesh(mesh):
     import bpy
     import bmesh
     import numpy as np
+
     # Create a new mesh and object
     bpy_mesh = bpy.data.meshes.new(name="TempMesh")
     obj = bpy.data.objects.new(name="TempObject", object_data=bpy_mesh)
@@ -66,7 +67,10 @@ def bpy_unwrap_mesh(mesh):
 
     # Add faces
     for f in faces:
-        bm.faces.new([vert_list[i] for i in f])
+        try:
+            bm.faces.new([vert_list[i] for i in f])
+        except ValueError:
+            pass  # Prevent duplicate face errors
 
     # Write the BMesh to the mesh data
     bm.to_mesh(bpy_mesh)
@@ -77,14 +81,48 @@ def bpy_unwrap_mesh(mesh):
     bpy.ops.uv.smart_project(angle_limit=66.0, island_margin=0.03)
     bpy.ops.object.mode_set(mode='OBJECT')
 
-    # Extract UV coordinates
+    # Extract per-face-corner (loop) UVs
     uv_layer = bpy_mesh.uv_layers.active.data
-    uvs = np.array([uv.uv for uv in uv_layer], dtype=np.float32)
+    if not uv_layer:
+        print("No UV layer found!")
+        return mesh
+
+    # Get per-loop UVs
+    uvs = np.zeros((len(faces), 3, 2), dtype=np.float32)
+    for i, face in enumerate(bpy_mesh.polygons):
+        for j, loop_index in enumerate(face.loop_indices):
+            uvs[i, j] = uv_layer[loop_index].uv
+
+    # Flatten to per-vertex UVs by averaging per-vertex UVs
+    uv_dict = {}
+    for face, uv_face in zip(faces, uvs):
+        for vert_idx, uv in zip(face, uv_face):
+            if vert_idx not in uv_dict:
+                uv_dict[vert_idx] = []
+            uv_dict[vert_idx].append(uv)
+
+    averaged_uvs = np.zeros((len(vertices), 2), dtype=np.float32)
+    for vert_idx, uv_list in uv_dict.items():
+        averaged_uvs[vert_idx] = np.mean(uv_list, axis=0)
+
+    vertex_uvs = np.zeros((len(vertices), 2), dtype=np.float32)
+    counts = np.zeros(len(vertices), dtype=np.int32)
+
+    for face, uv_face in zip(faces, uvs):
+        for vert_idx, uv in zip(face, uv_face):
+            vertex_uvs[vert_idx] += uv
+            counts[vert_idx] += 1
+
+    # Avoid division by zero
+    counts[counts == 0] = 1
+    vertex_uvs /= counts[:, None]
+
+    # Assign UVs to trimesh
+    mesh.visual.uv = averaged_uvs
 
     # Cleanup: Remove the temporary object from the scene
     bpy.data.objects.remove(obj)
     bpy.data.meshes.remove(bpy_mesh)
 
-    mesh.visual.uv = uvs
-
     return mesh
+
