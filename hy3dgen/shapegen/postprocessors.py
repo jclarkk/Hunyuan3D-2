@@ -225,6 +225,8 @@ class FaceReducer:
         # Move to CPU
         faces = faces.cpu().numpy()
 
+        del model
+
         return data_utils.to_mesh(vertices, faces, transpose=False, post_process=True)
 
     @staticmethod
