@@ -364,12 +364,12 @@ class Hunyuan3DPaintPipeline:
                     roughness_multiviews[i].save(f'debug_roughness_multiview_{i}.png')
                     metallic_multiviews[i].save(f'debug_metallic_multiview_{i}.png')
 
-            print('Baking albedo PBR texture...')
-            texture, mask = self.bake_from_multiview(albedo_multiviews,
-                                                     selected_camera_elevs,
-                                                     selected_camera_azims,
-                                                     selected_view_weights,
-                                                     method=self.config.merge_method)
+            # print('Baking albedo PBR texture...')
+            # texture, mask = self.bake_from_multiview(albedo_multiviews,
+            #                                          selected_camera_elevs,
+            #                                          selected_camera_azims,
+            #                                          selected_view_weights,
+            #                                          method=self.config.merge_method)
 
             # For some reason the normal texture is creating artifacts so we won't use it at the moment
             normal_texture = None
