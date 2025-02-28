@@ -137,6 +137,11 @@ def _gen_shape(
         octree_resolution=octree_resolution
     )[0]
 
+    if remesh_method == 'InstantMeshes':
+        remesh_method = 'im'
+    elif remesh_method == 'BPT':
+        remesh_method = 'bpt'
+
     mesh = FloaterRemover()(mesh)
     mesh = DegenerateFaceRemover()(mesh)
     mesh = FaceReducer()(mesh, max_facenum=face_count, remesh_method=remesh_method)
@@ -336,11 +341,6 @@ def build_app():
                         with gr.Row():
                             gr.Examples(examples=example_ts, inputs=[caption],
                                         label="Text Prompts", examples_per_page=18)
-
-        if remesh_method == 'InstantMeshes':
-            remesh_method = 'im'
-        elif remesh_method == 'BPT':
-            remesh_method = 'bpt'
 
         if not HAS_TEXTUREGEN:
             gr.HTML("""
