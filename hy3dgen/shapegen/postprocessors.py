@@ -138,13 +138,12 @@ class FaceReducer:
             self,
             mesh: Union[pymeshlab.MeshSet, trimesh.Trimesh, Latent2MeshOutput, str],
             max_facenum: int = 100000,
-            im_remesh: bool = False,
-            bpt_remesh: bool = False
+            remesh_method: str = None,
     ) -> Union[pymeshlab.MeshSet, trimesh.Trimesh]:
         target_vertex_count = int(max_facenum / 8)
 
         print(f"Reducing face count to {max_facenum}...")
-        if im_remesh:
+        if remesh_method is not None and remesh_method == "im":
             vertices, faces = PyNIM.remesh(
                 np.array(mesh.vertices, dtype=np.float32),
                 np.array(mesh.faces, dtype=np.uint32),
@@ -156,8 +155,7 @@ class FaceReducer:
             faces = self.quads_to_triangles(faces)
             mesh = trimesh.Trimesh(vertices, faces)
             mesh = trimesh.smoothing.filter_laplacian(mesh)
-
-        if bpt_remesh:
+        elif remesh_method is not None and remesh_method == "bpt":
             mesh = self.bpt_remesh(mesh)
 
         if len(mesh.faces) > max_facenum:

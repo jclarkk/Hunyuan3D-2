@@ -24,6 +24,15 @@ def run(args):
     if args.prompt is not None and args.image_paths is not None:
         raise ValueError("Please provide either a prompt or an image, not both")
 
+    if args.remesh_method not in [None, 'im', 'bpt', 'None']:
+        raise ValueError("Re-mesh type must be either 'im' or 'bpt'")
+
+    if args.texture_size not in [1024, 2048]:
+        raise ValueError("Texture size must be either 1024 or 2048")
+
+    if args.unwrap_method not in ['xatlas', 'open3d', 'bpy']:
+        raise ValueError("Unwrap method must be either 'xatlas', 'open3d' or 'bpy'")
+
     t0 = time.time()
     # Load mesh
     mesh = trimesh.load_mesh(args.mesh_path)
@@ -37,8 +46,8 @@ def run(args):
         current_mesh = ms.current_mesh()
         mesh = trimesh.Trimesh(vertices=current_mesh.vertex_matrix(), faces=current_mesh.face_matrix())
 
-    if args.bpt_remesh:
-        mesh = FaceReducer()(mesh, bpt_remesh=args.bpt_remesh)
+    if args.remesh_method is not None and args.remesh_method != 'None':
+        mesh = FaceReducer()(mesh, remesh_method=args.remesh_method)
 
         # Check if face count is still too high
         if len(mesh.faces) > 100000:
@@ -94,11 +103,12 @@ def run(args):
     mesh = texture_pipeline(
         mesh,
         image=image,
-        bpy_uv_unwrap=args.bpy_uv_unwrap,
+        unwrap_method=args.unwrap_method,
         upscale_model=args.upscale_model,
         enhance_texture_angles=args.enhance_texture_angles,
         pbr=args.pbr,
-        debug=args.debug
+        debug=args.debug,
+        texture_size=args.texture_size
     )
     t7 = time.time()
     print(f"Texture generation took {t7 - t6:.2f} seconds")
@@ -123,11 +133,14 @@ if __name__ == "__main__":
     parser.add_argument('--mesh_path', type=str, help='Path to input mesh', required=True)
     parser.add_argument('--output_dir', type=str, default='./output', help='Path to output directory')
     parser.add_argument('--seed', type=int, default=0, help='Seed for the random number generator')
-    parser.add_argument('--bpy_uv_unwrap', action='store_true', help='Use Blender UV unwrap', default=False)
+    parser.add_argument('--texture_size', type=int, default=1024, help='Texture size')
+    parser.add_argument('--remesh_method', type=str, help='Re-mesh method. Must be either "im" or "bpt" if used.',
+                        default=None)
+    parser.add_argument('--unwrap_method', type=str,
+                        help='UV unwrap method. Must be either "xatlas", "open3d" or "bpy"', default='xatlas')
     parser.add_argument('--upscale_model', type=str, default=None, help='Upscale model to use')
     parser.add_argument('--enhance_texture_angles', action='store_true', help='Enhance texture angles', default=False)
     parser.add_argument('--pbr', action='store_true', help='Generate PBR textures', default=False)
-    parser.add_argument('--bpt_remesh', action='store_true', help='Remesh using BPT', default=False)
     parser.add_argument('--debug', action='store_true', help='Debug mode', default=False)
     parser.add_argument('--profile', type=str, default="3")
     parser.add_argument('--verbose', type=str, default="1")

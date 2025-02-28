@@ -36,7 +36,7 @@ from .upscalers.pipelines import AuraSRUpscalerPipeline, InvSRUpscalerPipeline, 
 from .utils.dehighlight_utils import Light_Shadow_Remover
 from .utils.imagesuper_utils import Image_Super_Net
 from .utils.multiview_utils import Multiview_Diffusion_Net
-from .utils.uv_warp_utils import mesh_uv_wrap, bpy_unwrap_mesh
+from .utils.uv_warp_utils import mesh_uv_wrap, bpy_unwrap_mesh, open3d_mesh_uv_wrap
 
 logger = logging.getLogger(__name__)
 
@@ -197,7 +197,7 @@ class Hunyuan3DPaintPipeline:
     def __call__(self,
                  mesh,
                  image,
-                 bpy_uv_unwrap=False,
+                 unwrap_method='xatlas',
                  upscale_model=None,
                  enhance_texture_angles=False,
                  pbr=False,
@@ -221,10 +221,14 @@ class Hunyuan3DPaintPipeline:
 
         print('Wrapping UV...')
         t0 = time.time()
-        if bpy_uv_unwrap:
+        if unwrap_method == 'open3d':
+            mesh = open3d_mesh_uv_wrap(mesh, resolution=texture_size)
+        elif unwrap_method == 'bpy':
             mesh = bpy_unwrap_mesh(mesh)
-        else:
+        elif unwrap_method == 'xatlas':
             mesh = mesh_uv_wrap(mesh)
+        else:
+            raise ValueError(f"Invalid unwrap method {unwrap_method}")
         t1 = time.time()
         print(f"UV wrapping took {t1 - t0:.2f} seconds")
 

@@ -24,6 +24,8 @@
 
 import trimesh
 import xatlas
+import open3d as o3d
+import numpy as np
 
 
 def mesh_uv_wrap(mesh):
@@ -41,88 +43,129 @@ def mesh_uv_wrap(mesh):
 
     return mesh
 
+def open3d_mesh_uv_wrap(mesh, resolution=1024):
+    if isinstance(mesh, trimesh.Scene):
+        mesh = mesh.dump(concatenate=True)
+
+    o3d_mesh = o3d.t.geometry.TriangleMesh()
+    o3d_mesh.vertex.positions = o3d.core.Tensor(mesh.vertices)
+    o3d_mesh.triangle.indices = o3d.core.Tensor(mesh.faces)
+
+    o3d_mesh.compute_uvatlas(size=resolution)
+
+    new_v = mesh.vertices[mesh.faces.reshape(-1)]
+    new_f = np.arange(len(new_v)).reshape(-1, 3)
+    new_uv = o3d_mesh.triangle.texture_uvs.numpy().reshape(-1, 2)
+
+    mesh = trimesh.Trimesh(
+        vertices=new_v,
+        faces=new_f,
+        process=False
+    )
+    mesh.visual = trimesh.visual.TextureVisuals(
+        uv=new_uv.astype(np.float32),
+    )
+
+    return mesh
+
 
 def bpy_unwrap_mesh(mesh):
-    vertices = mesh.vertices
-    faces = mesh.faces
     import bpy
     import bmesh
     import numpy as np
 
-    # Create a new mesh and object
+    # Store original vertices and faces
+    vertices = mesh.vertices
+    faces = mesh.faces
+
+    # Clear any existing mesh with the same name
+    if "TempMesh" in bpy.data.meshes:
+        bpy.data.meshes.remove(bpy.data.meshes["TempMesh"])
+    if "TempObject" in bpy.data.objects:
+        bpy.data.objects.remove(bpy.data.objects["TempObject"])
+
+    # Create new mesh and object
     bpy_mesh = bpy.data.meshes.new(name="TempMesh")
     obj = bpy.data.objects.new(name="TempObject", object_data=bpy_mesh)
 
-    # Link the object to the scene
+    # Link to scene
     bpy.context.collection.objects.link(obj)
+
+    # Set as active object with proper context
     bpy.context.view_layer.objects.active = obj
     obj.select_set(True)
 
-    # Create a BMesh object and add geometry
+    # Create BMesh and populate
     bm = bmesh.new()
-
-    # Add vertices
     vert_list = [bm.verts.new(tuple(v)) for v in vertices]
     bm.verts.ensure_lookup_table()
 
-    # Add faces
+    # Add faces with error checking
     for f in faces:
         try:
-            bm.faces.new([vert_list[i] for i in f])
-        except ValueError:
-            pass  # Prevent duplicate face errors
+            face_verts = [vert_list[i] for i in f]
+            bm.faces.new(face_verts)
+        except ValueError as e:
+            print(f"Skipping invalid face: {e}")
+            continue
 
-    # Write the BMesh to the mesh data
+    # Update mesh
     bm.to_mesh(bpy_mesh)
     bm.free()
 
-    # Enter edit mode to unwrap
+    # Ensure UV layer exists
+    if not bpy_mesh.uv_layers:
+        bpy_mesh.uv_layers.new(name="UVMap")
+
+    # Switch to edit mode and unwrap with proper context
+    override = bpy.context.copy()
+    override['active_object'] = obj
+    override['object'] = obj
+    override['edit_object'] = obj
+    override['scene'] = bpy.context.scene
+
     bpy.ops.object.mode_set(mode='EDIT')
-    bpy.ops.uv.smart_project(angle_limit=66.0, island_margin=0.03)
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.uv.smart_project(
+        override,
+        angle_limit=66.0,
+        island_margin=0.03
+    )
     bpy.ops.object.mode_set(mode='OBJECT')
 
-    # Extract per-face-corner (loop) UVs
-    uv_layer = bpy_mesh.uv_layers.active.data
+    # Get UV data
+    uv_layer = bpy_mesh.uv_layers.active
     if not uv_layer:
-        print("No UV layer found!")
+        print("Failed to create UV layer")
         return mesh
 
-    # Get per-loop UVs
+    # Extract UV coordinates
+    uv_data = uv_layer.data
     uvs = np.zeros((len(faces), 3, 2), dtype=np.float32)
-    for i, face in enumerate(bpy_mesh.polygons):
-        for j, loop_index in enumerate(face.loop_indices):
-            uvs[i, j] = uv_layer[loop_index].uv
 
-    # Flatten to per-vertex UVs by averaging per-vertex UVs
-    uv_dict = {}
-    for face, uv_face in zip(faces, uvs):
-        for vert_idx, uv in zip(face, uv_face):
-            if vert_idx not in uv_dict:
-                uv_dict[vert_idx] = []
-            uv_dict[vert_idx].append(uv)
+    for poly in bpy_mesh.polygons:
+        for loop_idx, loop in enumerate(poly.loop_indices):
+            uv = uv_data[loop].uv
+            uvs[poly.index, loop_idx] = [uv.x, uv.y]
 
-    averaged_uvs = np.zeros((len(vertices), 2), dtype=np.float32)
-    for vert_idx, uv_list in uv_dict.items():
-        averaged_uvs[vert_idx] = np.mean(uv_list, axis=0)
-
+    # Create averaged UVs per vertex
     vertex_uvs = np.zeros((len(vertices), 2), dtype=np.float32)
     counts = np.zeros(len(vertices), dtype=np.int32)
 
-    for face, uv_face in zip(faces, uvs):
-        for vert_idx, uv in zip(face, uv_face):
+    for face_idx, face in enumerate(faces):
+        for vert_idx, uv in zip(face, uvs[face_idx]):
             vertex_uvs[vert_idx] += uv
             counts[vert_idx] += 1
 
-    # Avoid division by zero
-    counts[counts == 0] = 1
-    vertex_uvs /= counts[:, None]
+    # Avoid division by zero and compute average
+    mask = counts > 0
+    vertex_uvs[mask] /= counts[mask, None]
 
-    # Assign UVs to trimesh
-    mesh.visual.uv = averaged_uvs
+    # Create new TextureVisuals object
+    mesh.visual = trimesh.visual.TextureVisuals(uv=vertex_uvs)
 
-    # Cleanup: Remove the temporary object from the scene
+    # Clean up
     bpy.data.objects.remove(obj)
     bpy.data.meshes.remove(bpy_mesh)
 
     return mesh
-

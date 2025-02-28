@@ -96,8 +96,7 @@ def _gen_shape(
         seed=1234,
         octree_resolution=256,
         check_box_rembg=False,
-        im_remesh=False,
-        bpt_remesh=False,
+        remesh_method='None',
         face_count=60000
 ):
     if caption: print('prompt is', caption)
@@ -140,7 +139,7 @@ def _gen_shape(
 
     mesh = FloaterRemover()(mesh)
     mesh = DegenerateFaceRemover()(mesh)
-    mesh = FaceReducer()(mesh, max_facenum=face_count, im_remesh=im_remesh, bpt_remesh=bpt_remesh)
+    mesh = FaceReducer()(mesh, max_facenum=face_count, remesh_method=remesh_method)
 
     stats['number_of_faces'] = mesh.faces.shape[0]
     stats['number_of_vertices'] = mesh.vertices.shape[0]
@@ -159,16 +158,14 @@ def generation_all(
         seed=1234,
         octree_resolution=256,
         check_box_rembg=False,
-        remesh_type='None',
+        remesh_method='None',
+        uv_unwrap_method='xatlas',
         face_count=60000,
         upscale_model='Aura',
         enhance_texture_angles=False,
         pbr=False,
         texture_size=1024
 ):
-    im_remesh = remesh_type == "InstantMeshes"
-    bpt_remesh = remesh_type == "BPT"
-
     mesh, image, save_folder = _gen_shape(
         caption,
         image,
@@ -177,8 +174,7 @@ def generation_all(
         seed=seed,
         octree_resolution=octree_resolution,
         check_box_rembg=check_box_rembg,
-        im_remesh=im_remesh,
-        bpt_remesh=bpt_remesh,
+        remesh_method=remesh_method,
         face_count=face_count
     )
     path = export_mesh(mesh, save_folder, textured=False)
@@ -190,7 +186,8 @@ def generation_all(
         upscale_model=upscale_model,
         enhance_texture_angles=enhance_texture_angles,
         pbr=pbr,
-        texture_size=texture_size
+        texture_size=texture_size,
+        unwrap_method=uv_unwrap_method
     )
     path_textured = export_mesh(textured_mesh, save_folder, textured=True)
     model_viewer_html_textured = build_model_viewer_html(save_folder, height=596, width=700, textured=True)
@@ -211,13 +208,10 @@ def shape_generation(
         seed=1234,
         octree_resolution=256,
         check_box_rembg=False,
-        remesh_type='None',
+        remesh_method='None',
         face_count=60000
 ):
     print('Generating shape ...')
-
-    im_remesh = remesh_type == "InstantMeshes"
-    bpt_remesh = remesh_type == "BPT"
 
     mesh, image, save_folder = _gen_shape(
         caption,
@@ -227,8 +221,7 @@ def shape_generation(
         seed=seed,
         octree_resolution=octree_resolution,
         check_box_rembg=check_box_rembg,
-        im_remesh=im_remesh,
-        bpt_remesh=bpt_remesh,
+        remesh_method=remesh_method,
         face_count=face_count
     )
 
@@ -310,7 +303,8 @@ def build_app():
                         enhance_texture = gr.Checkbox(label='Enhance Texture Angles', value=False)
                         pbr = gr.Checkbox(label='PBR Texture (Experimental, use the README in folder)', value=False)
 
-                    remesh_type = gr.Radio(['InstantMeshes', 'BPT', 'None'], label='Remesh Type', value='None')
+                    remesh_method = gr.Radio(['InstantMeshes', 'BPT', 'None'], label='Remesh Method', value='None')
+                    uv_unwrap_method = gr.Radio(['xatlas', 'open3d', 'bpy'], label='UV Unwrap Method', value='xatlas')
                     face_count = gr.Slider(minimum=1000, maximum=100000, step=1000, value=50000, label='Face Count')
                     super_resolution = gr.Radio(['None', 'Aura', 'InvSR', 'Flux', 'SD-Upscaler'],
                                                 label='Super-Resolution (Install the method required, use README in folder)',
@@ -373,7 +367,7 @@ def build_app():
                 seed,
                 octree_resolution,
                 check_box_rembg,
-                remesh_type,
+                remesh_method,
                 face_count
             ],
             outputs=[file_out, html_output1]
@@ -392,7 +386,8 @@ def build_app():
                 seed,
                 octree_resolution,
                 check_box_rembg,
-                remesh_type,
+                remesh_method,
+                uv_unwrap_method,
                 face_count,
                 super_resolution,
                 enhance_texture,
