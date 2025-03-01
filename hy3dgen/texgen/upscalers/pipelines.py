@@ -30,16 +30,17 @@ class FluxUpscalerPipeline:
         self.device = device
 
     def __call__(self, input_image: Image.Image) -> Image.Image:
-        resized_image = input_image.resize((1024, 1024))
+        w, h = input_image.size
+        input_image = input_image.resize((w * 4, h * 4))
 
         return self.pipe(
             prompt="",
-            control_image=resized_image,
+            control_image=input_image,
             controlnet_conditioning_scale=0.8,
             num_inference_steps=28,
             guidance_scale=3.5,
-            height=resized_image.size[1],
-            width=resized_image.size[0]
+            height=input_image.size[1],
+            width=input_image.size[0]
         ).images[0]
 
 
