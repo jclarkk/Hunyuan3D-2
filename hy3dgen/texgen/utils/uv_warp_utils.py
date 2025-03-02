@@ -23,12 +23,11 @@
 # by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
 
 import trimesh
-import xatlas
-import open3d as o3d
 import numpy as np
 
 
 def mesh_uv_wrap(mesh):
+    import xatlas
     if isinstance(mesh, trimesh.Scene):
         mesh = mesh.dump(concatenate=True)
 
@@ -44,6 +43,7 @@ def mesh_uv_wrap(mesh):
     return mesh
 
 def open3d_mesh_uv_wrap(mesh, resolution=1024):
+    import open3d as o3d
     if isinstance(mesh, trimesh.Scene):
         mesh = mesh.dump(concatenate=True)
 
@@ -72,7 +72,6 @@ def open3d_mesh_uv_wrap(mesh, resolution=1024):
 def bpy_unwrap_mesh(mesh):
     import bpy
     import bmesh
-    import numpy as np
 
     # Store original vertices and faces
     vertices = mesh.vertices
