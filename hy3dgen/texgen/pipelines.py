@@ -405,12 +405,7 @@ class Hunyuan3DPaintPipeline:
                 metallic_texture
             )
 
-            from .vlm.pipelines import MoondreamPipeline
-            moondream_pipeline = MoondreamPipeline.from_pretrained()
-            roughness_factor, metallic_factor = moondream_pipeline(image_prompt)
-
-            print(f"Raw roughness value: {roughness_factor}")
-            print(f"Raw metalness value: {metallic_factor}")
+            roughness_factor, metallic_factor = 0.8, 0.8
 
             t1 = time.time()
             print(f"PBR texture baking took {t1 - t0:.2f} seconds")

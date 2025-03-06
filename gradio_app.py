@@ -274,7 +274,6 @@ def build_app():
             <div class="space-y-2">
                 <h3 class="font-semibold text-lg text-gray-700">PBR Implementation</h3>
                 <p class="text-gray-600">Based on <a href="https://github.com/zheng95z/rgbx" class="text-blue-600 hover:text-blue-800">rgbx</a></p>
-                <p class="text-gray-500 text-sm">Installation: <code class="bg-gray-100 px-2 py-1 rounded">hy3dgen/texgen/pbr/README.md</code></p>
             </div>
         </div>
     </div>
