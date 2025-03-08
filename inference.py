@@ -92,7 +92,7 @@ def run(args):
         torch.cuda.empty_cache()
 
         t4 = time.time()
-        mesh = texture_pipeline(mesh, image=image, unwrap_method=args.unwrap_method)
+        mesh = texture_pipeline(mesh, image=image, unwrap_method=args.unwrap_method, seed=args.seed)
         t5 = time.time()
         print(f"Texture generation took {t5 - t4:.2f} seconds")
     else:

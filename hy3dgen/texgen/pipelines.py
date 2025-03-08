@@ -32,6 +32,7 @@ import torch
 from PIL import Image
 
 from .differentiable_renderer.mesh_render import MeshRender
+from .mvadapter.pipeline import MVAdapterPipelineWrapper
 from .upscalers.pipelines import AuraSRUpscalerPipeline, InvSRUpscalerPipeline, FluxUpscalerPipeline
 from .utils.dehighlight_utils import Light_Shadow_Remover
 from .utils.imagesuper_utils import Image_Super_Net
@@ -43,8 +44,9 @@ logger = logging.getLogger(__name__)
 
 class Hunyuan3DTexGenConfig:
 
-    def __init__(self, light_remover_ckpt_path, multiview_ckpt_path):
+    def __init__(self, light_remover_ckpt_path, multiview_ckpt_path, mv_model='hunyuan3d-paint-v2-0'):
         self.device = 'cpu'
+        self.mv_model = mv_model
         self.light_remover_ckpt_path = light_remover_ckpt_path
         self.multiview_ckpt_path = multiview_ckpt_path
 
@@ -65,7 +67,7 @@ class Hunyuan3DTexGenConfig:
 
 class Hunyuan3DPaintPipeline:
     @classmethod
-    def from_pretrained(cls, model_path):
+    def from_pretrained(cls, model_path, mv_model='hunyuan3d-paint-v2-0'):
         original_model_path = model_path
         if not os.path.exists(model_path):
             # try local path
@@ -82,14 +84,16 @@ class Hunyuan3DPaintPipeline:
                     model_path = huggingface_hub.snapshot_download(repo_id=original_model_path)
                     delight_model_path = os.path.join(model_path, 'hunyuan3d-delight-v2-0')
                     multiview_model_path = os.path.join(model_path, 'hunyuan3d-paint-v2-0')
-                    return cls(Hunyuan3DTexGenConfig(delight_model_path, multiview_model_path))
+                    return cls(Hunyuan3DTexGenConfig(delight_model_path, multiview_model_path,
+                                                     mv_model=mv_model))
                 except ImportError:
                     logger.warning(
                         "You need to install HuggingFace Hub to load models from the hub."
                     )
                     raise RuntimeError(f"Model path {model_path} not found")
             else:
-                return cls(Hunyuan3DTexGenConfig(delight_model_path, multiview_model_path))
+                return cls(Hunyuan3DTexGenConfig(delight_model_path, multiview_model_path,
+                                                 mv_model=mv_model))
 
         raise FileNotFoundError(f"Model path {original_model_path} not found and we could not find it at huggingface")
 
@@ -108,7 +112,11 @@ class Hunyuan3DPaintPipeline:
         # Load model
         self.models['delight_model'] = Light_Shadow_Remover(self.config)
         print('Delight model loaded')
-        self.models['multiview_model'] = Multiview_Diffusion_Net(self.config)
+        print(f'Loading multiview model: {self.config.mv_model}')
+        if self.config.mv_model == 'hunyuan3d-paint-v2-0':
+            self.models['multiview_model'] = Multiview_Diffusion_Net(self.config)
+        elif self.config.mv_model == 'mv-adapter':
+            self.models['multiview_model'] = MVAdapterPipelineWrapper.from_pretrained()
         print('Multiview model loaded')
 
     def render_normal_multiview(self, camera_elevs, camera_azims, use_abs_coor=True):
@@ -202,7 +210,8 @@ class Hunyuan3DPaintPipeline:
                  enhance_texture_angles=False,
                  pbr=False,
                  debug=False,
-                 texture_size=1024):
+                 texture_size=1024,
+                 seed=42):
         self.config.texture_size = texture_size
         self.render.set_default_texture_resolution(texture_size)
 
@@ -273,7 +282,13 @@ class Hunyuan3DPaintPipeline:
 
         print('Generate multiviews...')
         t0 = time.time()
-        multiviews = self.models['multiview_model'](image_prompt, normal_maps + position_maps, camera_info)
+        if self.config.mv_model == 'hunyuan3d-paint-v2-0':
+            multiviews = self.models['multiview_model'](image_prompt, normal_maps + position_maps, camera_info)
+        elif self.config.mv_model == 'mv-adapter':
+            multiviews = self.models['multiview_model'](image_prompt, normal_maps, position_maps, camera_info,
+                                                        len(selected_camera_azims))
+        else:
+            raise ValueError(f"Invalid MV model {self.config.mv_model}")
         t1 = time.time()
         print(f"Generating multiviews took {t1 - t0:.2f} seconds")
 
@@ -344,7 +359,7 @@ class Hunyuan3DPaintPipeline:
             albedo_multiviews, metallic_multiviews, normal_multiviews, roughness_multiviews = (
                 self.generate_pbr_for_batch(pbr_pipeline, pre_pbr_multiviews))
 
-            if enhance_texture_angles:
+            if self.config.enhance_texture_angles:
                 pre_pbr_multiviews = [view.resize((1024, 1024)) for view in multiviews[6:]]
                 albedo_multiviews_enhanced, metallic_multiviews_enhanced, normal_multiviews_enhanced, roughness_multiviews_enhanced = (
                     self.generate_pbr_for_batch(pbr_pipeline, pre_pbr_multiviews))

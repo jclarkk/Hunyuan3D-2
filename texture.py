@@ -60,11 +60,12 @@ def run(args):
     # Load models
     profile = int(args.profile)
     kwargs = {}
-    texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2')
+    texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2', mv_model=args.mv_model)
     print('3D Paint pipeline loaded')
 
     pipe = offload.extract_models("texgen_worker", texture_pipeline)
-    texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
+    if args.mv_model == 'hunyuan3d-paint-v2-0':
+        texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
 
     t2i_pipeline = None
     if args.prompt is not None:
@@ -105,10 +106,10 @@ def run(args):
         image=image,
         unwrap_method=args.unwrap_method,
         upscale_model=args.upscale_model,
-        enhance_texture_angles=args.enhance_texture_angles,
         pbr=args.pbr,
         debug=args.debug,
-        texture_size=args.texture_size
+        texture_size=args.texture_size,
+        seed=args.seed
     )
     t7 = time.time()
     print(f"Texture generation took {t7 - t6:.2f} seconds")
@@ -138,6 +139,7 @@ if __name__ == "__main__":
                         default=None)
     parser.add_argument('--unwrap_method', type=str,
                         help='UV unwrap method. Must be either "xatlas", "open3d" or "bpy"', default='xatlas')
+    parser.add_argument('--mv_model', type=str, default='hunyuan3d-paint-v2-0', help='Multiview model to use')
     parser.add_argument('--upscale_model', type=str, default=None, help='Upscale model to use')
     parser.add_argument('--enhance_texture_angles', action='store_true', help='Enhance texture angles', default=False)
     parser.add_argument('--pbr', action='store_true', help='Generate PBR textures', default=False)
