@@ -309,8 +309,6 @@ class MVAdapterI2MVSDXLPipeline(StableDiffusionXLPipeline, CustomAdapterMixin):
         # Image condition
         reference_image: Optional[PipelineImageInput] = None,
         reference_conditioning_scale: Optional[float] = 1.0,
-        # Number of views
-        num_views: int = 1,
         **kwargs,
     ):
         r"""
@@ -637,7 +635,6 @@ class MVAdapterI2MVSDXLPipeline(StableDiffusionXLPipeline, CustomAdapterMixin):
                     "cache_hidden_states": ref_hidden_states,
                     "use_mv": False,
                     "use_ref": False,
-                    "num_views": num_views,
                 },
                 return_dict=False,
             )
