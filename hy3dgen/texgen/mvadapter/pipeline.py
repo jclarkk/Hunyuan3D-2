@@ -19,7 +19,8 @@ class MVAdapterPipelineWrapper:
     """
 
     @classmethod
-    def from_pretrained(cls, base_model: str = "stabilityai/stable-diffusion-xl-base-1.0", device: str = "cuda"):
+    def from_pretrained(cls, base_model: str = "stabilityai/stable-diffusion-xl-base-1.0", device: str = "cuda",
+                        num_views: int = 6):
         """
         Initialize the MV-Adapter pipeline from pretrained weights without specifying num_views.
         """
@@ -33,6 +34,11 @@ class MVAdapterPipelineWrapper:
             shift_scale=8.0,
             scheduler_class=DDIMScheduler
         )
+        pipe.init_custom_adapter(num_views=num_views, self_attn_processor=DecoupledMVRowColSelfAttnProcessor2_0)
+
+        pipe.load_custom_adapter('huanngzh/mv-adapter', weight_name="mvadapter_ig2mv_sdxl.safetensors")
+        pipe.to(device=device, dtype=torch.float16)
+        pipe.cond_encoder.to(device=device, dtype=torch.float16)
         pipe.to(device=device, dtype=torch.float16)
         return cls(pipe, device=device)
 
@@ -186,7 +192,7 @@ class MVAdapterPipelineWrapper:
                  negative_prompt: str = "watermark, ugly, deformed, noisy, blurry, low contrast",
                  use_mesh_renderer: bool = False,
                  lora_scale: float = 1.0,
-                 save_debug_images: bool = True):
+                 save_debug_images: bool = False):
         """
         Generate multi-view images using the MV-Adapter pipeline.
 
@@ -210,15 +216,6 @@ class MVAdapterPipelineWrapper:
             lora_scale: Scale for LoRA if used
             save_debug_images: Whether to save intermediate images for debugging
         """
-
-        # Initialize the pipeline with the custom adapter since we can only declare num of views at call-time.
-        self.pipeline.init_custom_adapter(num_views=num_views,
-                                          self_attn_processor=DecoupledMVRowColSelfAttnProcessor2_0)
-
-        self.pipeline.load_custom_adapter('huanngzh/mv-adapter', weight_name="mvadapter_ig2mv_sdxl.safetensors")
-        self.pipeline.to(device=self.device, dtype=torch.float16)
-        self.pipeline.cond_encoder.to(device=self.device, dtype=torch.float16)
-        self.current_num_views = num_views
 
         # Prepare reference image
         if isinstance(image_prompt, str):
@@ -257,8 +254,6 @@ class MVAdapterPipelineWrapper:
             for i in range(num_views):
                 pos_img_tensor = pos_tensor[i].clamp(0, 1).cpu().float()
                 norm_img_tensor = norm_tensor[i].clamp(0, 1).cpu().float()
-                print(
-                    f"View {i} - pos_img_tensor shape: {pos_img_tensor.shape}, norm_img_tensor shape: {norm_img_tensor.shape}")
 
                 # Manual conversion if tensor_to_image fails
                 pos_data = (pos_img_tensor.permute(1, 2, 0).numpy() * 255).astype(np.uint8)

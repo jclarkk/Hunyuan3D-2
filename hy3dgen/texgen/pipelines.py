@@ -44,11 +44,13 @@ logger = logging.getLogger(__name__)
 
 class Hunyuan3DTexGenConfig:
 
-    def __init__(self, light_remover_ckpt_path, multiview_ckpt_path, mv_model='hunyuan3d-paint-v2-0'):
+    def __init__(self, light_remover_ckpt_path, multiview_ckpt_path, mv_model='hunyuan3d-paint-v2-0',
+                 enhance_texture_angles=False):
         self.device = 'cpu'
         self.mv_model = mv_model
         self.light_remover_ckpt_path = light_remover_ckpt_path
         self.multiview_ckpt_path = multiview_ckpt_path
+        self.enhance_texture_angles = enhance_texture_angles
 
         self.candidate_camera_azims = [0, 90, 180, 270, 0, 180]
         self.candidate_camera_elevs = [0, 0, 0, 0, 90, -90]
@@ -67,7 +69,7 @@ class Hunyuan3DTexGenConfig:
 
 class Hunyuan3DPaintPipeline:
     @classmethod
-    def from_pretrained(cls, model_path, mv_model='hunyuan3d-paint-v2-0'):
+    def from_pretrained(cls, model_path, mv_model='hunyuan3d-paint-v2-0', enhance_texture_angles=False):
         original_model_path = model_path
         if not os.path.exists(model_path):
             # try local path
@@ -85,7 +87,7 @@ class Hunyuan3DPaintPipeline:
                     delight_model_path = os.path.join(model_path, 'hunyuan3d-delight-v2-0')
                     multiview_model_path = os.path.join(model_path, 'hunyuan3d-paint-v2-0')
                     return cls(Hunyuan3DTexGenConfig(delight_model_path, multiview_model_path,
-                                                     mv_model=mv_model))
+                                                     mv_model=mv_model, enhance_texture_angles=enhance_texture_angles))
                 except ImportError:
                     logger.warning(
                         "You need to install HuggingFace Hub to load models from the hub."
@@ -93,7 +95,7 @@ class Hunyuan3DPaintPipeline:
                     raise RuntimeError(f"Model path {model_path} not found")
             else:
                 return cls(Hunyuan3DTexGenConfig(delight_model_path, multiview_model_path,
-                                                 mv_model=mv_model))
+                                                 mv_model=mv_model, enhance_texture_angles=enhance_texture_angles))
 
         raise FileNotFoundError(f"Model path {original_model_path} not found and we could not find it at huggingface")
 
@@ -116,7 +118,11 @@ class Hunyuan3DPaintPipeline:
         if self.config.mv_model == 'hunyuan3d-paint-v2-0':
             self.models['multiview_model'] = Multiview_Diffusion_Net(self.config)
         elif self.config.mv_model == 'mv-adapter':
-            self.models['multiview_model'] = MVAdapterPipelineWrapper.from_pretrained()
+            if self.config.enhance_texture_angles:
+                num_views = len(self.config.candidate_camera_azims_enhanced)
+            else:
+                num_views = len(self.config.candidate_camera_azims)
+            self.models['multiview_model'] = MVAdapterPipelineWrapper.from_pretrained(num_views=num_views)
         print('Multiview model loaded')
 
     def render_normal_multiview(self, camera_elevs, camera_azims, use_abs_coor=True):

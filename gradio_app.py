@@ -421,6 +421,7 @@ if __name__ == '__main__':
     parser.add_argument('--host', type=str, default='0.0.0.0')
     parser.add_argument('--cache-path', type=str, default='gradio_cache')
     parser.add_argument('--enable_t23d', action='store_true')
+    parser.add_argument('--enhance_texture_angles', action='store_true', help='Enhance texture angles', default=False)
     parser.add_argument('--mv_model', type=str, default='hunyuan3d-paint-v2-0', help='Multiview model to use')
     parser.add_argument('--profile', type=str, default="3")
     parser.add_argument('--verbose', type=str, default="1")
@@ -447,7 +448,8 @@ if __name__ == '__main__':
     try:
         from hy3dgen.texgen import Hunyuan3DPaintPipeline
 
-        texgen_worker = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2', mv_model=args.mv_model)
+        texgen_worker = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2', mv_model=args.mv_model,
+                                                               enhance_texture_angles=args.enhance_texture_angles)
         HAS_TEXTUREGEN = True
     except Exception as e:
         print(e)
