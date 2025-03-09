@@ -494,9 +494,7 @@ class MeshRender():
         normal, _ = self.raster_interpolate(
             vertex_normals[None, ...], rast_out, self.pos_idx)
 
-        visible_mask = torch.clamp(rast_out[..., -1:], 0, 1)  # [1, H, W, 1]
-        print(
-            f"Visible mask shape: {visible_mask.shape}, min: {visible_mask.min().item():.4f}, max: {visible_mask.max().item():.4f}")
+        visible_mask = torch.clamp(rast_out[..., -1:], 0, 1)  # [1, H, W, 1]R
 
         if normalize_rgb:
             normal = (normal + 1) * 0.5  # Now in [0, 1]
