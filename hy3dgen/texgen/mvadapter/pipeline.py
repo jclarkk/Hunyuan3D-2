@@ -40,12 +40,12 @@ class MVAdapterPipelineWrapper:
         pipe.to(device=device, dtype=torch.float16)
         pipe.cond_encoder.to(device=device, dtype=torch.float16)
         pipe.to(device=device, dtype=torch.float16)
-        return cls(pipe, device=device)
+        return cls(pipe, device=device, num_views=num_views)
 
-    def __init__(self, pipeline: MVAdapterI2MVSDXLPipeline, device: str):
+    def __init__(self, pipeline: MVAdapterI2MVSDXLPipeline, device: str, num_views: int = 6):
         self.pipeline = pipeline
         self.device = device
-        self.ctx = NVDiffRastContextWrapper(device=device)
+        self.num_views = num_views
 
     def preprocess_reference_image(self, image: Image.Image, height: int, width: int) -> Image.Image:
         """
@@ -109,9 +109,10 @@ class MVAdapterPipelineWrapper:
             device=self.device,
         )
 
+        ctx = NVDiffRastContextWrapper(device=self.device)
         # Render the mesh
         render_out = render(
-            self.ctx,
+            ctx,
             current_mesh,
             cameras,
             height=height,
@@ -180,7 +181,6 @@ class MVAdapterPipelineWrapper:
                  normal_maps: List[Image.Image] = None,
                  position_maps: List[Image.Image] = None,
                  camera_info: List[int] = None,
-                 num_views: int = 6,
                  seed: int = 42,
                  height: int = 768,
                  width: int = 768,
@@ -229,13 +229,13 @@ class MVAdapterPipelineWrapper:
         if use_mesh_renderer and mesh is not None:
             # Use the MV-Adapter mesh rendering approach
             control_images, pos_images, normal_images = self.generate_control_images_from_mesh(
-                mesh, num_views, height, width
+                mesh, self.num_views, height, width
             )
             source = "mesh"
         elif normal_maps is not None and position_maps is not None:
             # Use the Hunyuan rendered maps
             control_images, pos_images, normal_images = self.generate_control_images_from_maps(
-                normal_maps, position_maps, num_views, height, width
+                normal_maps, position_maps, self.num_views, height, width
             )
             source = "maps"
         else:
@@ -251,7 +251,7 @@ class MVAdapterPipelineWrapper:
             norm_tensor = control_images[:, 3:, :, :]
             print(f"pos_tensor shape: {pos_tensor.shape}, norm_tensor shape: {norm_tensor.shape}")
 
-            for i in range(num_views):
+            for i in range(self.num_views):
                 pos_img_tensor = pos_tensor[i].clamp(0, 1).cpu().float()
                 norm_img_tensor = norm_tensor[i].clamp(0, 1).cpu().float()
 
@@ -275,7 +275,7 @@ class MVAdapterPipelineWrapper:
             width=width,
             num_inference_steps=num_inference_steps,
             guidance_scale=guidance_scale,
-            num_images_per_prompt=num_views,
+            num_images_per_prompt=self.num_views,
             control_image=control_images,
             control_conditioning_scale=control_conditioning_scale,
             reference_image=reference_image,

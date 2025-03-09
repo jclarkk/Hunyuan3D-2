@@ -122,6 +122,7 @@ class Hunyuan3DPaintPipeline:
                 num_views = len(self.config.candidate_camera_azims_enhanced)
             else:
                 num_views = len(self.config.candidate_camera_azims)
+            print('Loading MV Adapter model with num_views:', num_views)
             self.models['multiview_model'] = MVAdapterPipelineWrapper.from_pretrained(num_views=num_views)
         print('Multiview model loaded')
 
