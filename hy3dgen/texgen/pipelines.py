@@ -252,7 +252,12 @@ class Hunyuan3DPaintPipeline:
         if self.config.use_delight:
             print('Removing light and shadow...')
             t0 = time.time()
-            image_prompt = self.models['delight_model'](image_prompt)
+            height, width = 512, 512
+            if self.config.mv_model == 'mv-adapter':
+                height = 768
+                width = 768
+
+            image_prompt = self.models['delight_model'](image_prompt, height, width)
             t1 = time.time()
             print(f"Light and shadow removal took {t1 - t0:.2f} seconds")
 

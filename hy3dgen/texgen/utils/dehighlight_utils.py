@@ -74,9 +74,9 @@ class Light_Shadow_Remover():
         return corrected_bgr
 
     @torch.no_grad()
-    def __call__(self, image):
+    def __call__(self, image, height, width):
 
-        image = image.resize((512, 512))
+        image = image.resize((height, width))
 
         if image.mode == 'RGBA':
             image_array = np.array(image)
@@ -89,7 +89,7 @@ class Light_Shadow_Remover():
             image = Image.fromarray(image_array)
             alpha = torch.tensor(alpha_channel / 255.0).unsqueeze(-1).to(self.device)
         else:
-            alpha = torch.ones((512, 512, 1), device=self.device)
+            alpha = torch.ones((height, width, 1), device=self.device)
 
         image = image.convert('RGB')
 
@@ -97,8 +97,8 @@ class Light_Shadow_Remover():
             prompt="",
             image=image,
             generator=torch.manual_seed(42),
-            height=512,
-            width=512,
+            height=height,
+            width=width,
             num_inference_steps=50,
             image_guidance_scale=self.cfg_image,
             guidance_scale=self.cfg_text,

@@ -129,11 +129,7 @@ class MVAdapterPipelineWrapper:
         normal_tensor = (render_out.normal / 2 + 0.5).clamp(0, 1)
 
         control_images = torch.cat([pos_tensor, normal_tensor], dim=-1)
-        print(f"Combined tensor shape: {control_images.shape}")
-
         control_images = control_images.permute(0, 3, 1, 2)
-        print(f"Permuted tensor shape: {control_images.shape}")
-
         control_images = control_images.to(device=self.device, dtype=torch.float16)
 
         return control_images, pos_images, normal_images
@@ -258,8 +254,6 @@ class MVAdapterPipelineWrapper:
             for i in range(num_views):
                 pos_img_tensor = pos_tensor[i].clamp(0, 1).cpu().float()
                 norm_img_tensor = norm_tensor[i].clamp(0, 1).cpu().float()
-                print(
-                    f"View {i} - pos_img_tensor shape: {pos_img_tensor.shape}, norm_img_tensor shape: {norm_img_tensor.shape}")
 
                 # Manual conversion if tensor_to_image fails
                 pos_data = (pos_img_tensor.permute(1, 2, 0).numpy() * 255).astype(np.uint8)
