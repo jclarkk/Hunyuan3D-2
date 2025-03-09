@@ -167,7 +167,6 @@ def generation_all(
         uv_unwrap_method='xatlas',
         face_count=60000,
         upscale_model='Aura',
-        enhance_texture_angles=False,
         pbr=False,
         texture_size=1024
 ):
@@ -189,7 +188,6 @@ def generation_all(
         mesh,
         image,
         upscale_model=upscale_model,
-        enhance_texture_angles=enhance_texture_angles,
         pbr=pbr,
         texture_size=texture_size,
         unwrap_method=uv_unwrap_method
@@ -310,7 +308,6 @@ def build_app():
                     with gr.Row():
                         texture_size = gr.Slider(minimum=1024, maximum=2048, step=1024, value=1024,
                                                  label='Texture Resolution')
-                        enhance_texture = gr.Checkbox(label='Enhance Texture Angles', value=False)
                         pbr = gr.Checkbox(label='PBR Texture (Experimental, use the README in folder)', value=False)
 
                     remesh_method = gr.Radio(['InstantMeshes', 'BPT', 'None'], label='Remesh Method', value='None')
@@ -400,7 +397,6 @@ def build_app():
                 uv_unwrap_method,
                 face_count,
                 super_resolution,
-                enhance_texture,
                 pbr,
                 texture_size
             ],

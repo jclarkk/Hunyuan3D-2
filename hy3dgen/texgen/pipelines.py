@@ -235,7 +235,6 @@ class Hunyuan3DPaintPipeline:
                  image,
                  unwrap_method='xatlas',
                  upscale_model=None,
-                 enhance_texture_angles=False,
                  pbr=False,
                  debug=False,
                  texture_size=1024,
@@ -271,7 +270,7 @@ class Hunyuan3DPaintPipeline:
 
         self.render.load_mesh(mesh)
 
-        if enhance_texture_angles:
+        if self.config.enhance_texture_angles:
             selected_camera_elevs, selected_camera_azims, selected_view_weights = \
                 (self.config.candidate_camera_elevs_enhanced, self.config.candidate_camera_azims_enhanced,
                  self.config.candidate_view_weights_enhanced)
@@ -293,7 +292,7 @@ class Hunyuan3DPaintPipeline:
                 normal_maps[i].save(f'debug_normal_map_{i}.png')
                 position_maps[i].save(f'debug_position_map_{i}.png')
 
-        if enhance_texture_angles:
+        if self.config.enhance_texture_angles:
             camera_info = [
                 (((azim // 30) + 9) % 12) // {
                     -90: 3, -45: 3, -20: 1, -15: 1, 0: 1, 15: 1, 20: 1, 90: 3
