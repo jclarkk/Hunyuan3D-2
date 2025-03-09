@@ -19,8 +19,7 @@ class MVAdapterPipelineWrapper:
     """
 
     @classmethod
-    def from_pretrained(cls, base_model: str = "stabilityai/stable-diffusion-xl-base-1.0", device: str = "cuda",
-                        num_views: int = 6):
+    def from_pretrained(cls, base_model: str = "stabilityai/stable-diffusion-xl-base-1.0", device: str = "cuda"):
         """
         Initialize the MV-Adapter pipeline from pretrained weights without specifying num_views.
         """
@@ -34,18 +33,17 @@ class MVAdapterPipelineWrapper:
             shift_scale=8.0,
             scheduler_class=DDIMScheduler
         )
-        pipe.init_custom_adapter(num_views=num_views, self_attn_processor=DecoupledMVRowColSelfAttnProcessor2_0)
+        pipe.init_custom_adapter(num_views=6, self_attn_processor=DecoupledMVRowColSelfAttnProcessor2_0)
 
         pipe.load_custom_adapter('huanngzh/mv-adapter', weight_name="mvadapter_ig2mv_sdxl.safetensors")
         pipe.to(device=device, dtype=torch.float16)
         pipe.cond_encoder.to(device=device, dtype=torch.float16)
         pipe.to(device=device, dtype=torch.float16)
-        return cls(pipe, device=device, num_views=num_views)
+        return cls(pipe, device=device)
 
     def __init__(self, pipeline: MVAdapterI2MVSDXLPipeline, device: str, num_views: int = 6):
         self.pipeline = pipeline
         self.device = device
-        self.num_views = num_views
 
     def preprocess_reference_image(self, image: Image.Image, height: int, width: int) -> Image.Image:
         """
@@ -89,7 +87,7 @@ class MVAdapterPipelineWrapper:
 
         return Image.fromarray(image_out)
 
-    def generate_control_images_from_mesh(self, mesh, num_views, height=768, width=768):
+    def generate_control_images_from_mesh(self, mesh, height=768, width=768):
         """
         Generate control images from a mesh using the original pipeline's approach.
         """
@@ -100,7 +98,7 @@ class MVAdapterPipelineWrapper:
         # Prepare cameras using the same parameters as the original implementation
         cameras = get_orthogonal_camera(
             elevation_deg=[0, 0, 0, 0, 89.99, -89.99],
-            distance=[1.8] * num_views,
+            distance=[1.8] * 6,
             left=-0.55,
             right=0.55,
             bottom=-0.55,
@@ -138,13 +136,10 @@ class MVAdapterPipelineWrapper:
 
         return control_images, pos_images, normal_images
 
-    def generate_control_images_from_maps(self, normal_maps, position_maps, num_views, height, width):
+    def generate_control_images_from_maps(self, normal_maps, position_maps, height, width):
         """
         Generate control images from Hunyuan's pre-rendered normal and position maps.
         """
-        assert len(normal_maps) == num_views, f"Expected {num_views} normal maps, got {len(normal_maps)}"
-        assert len(position_maps) == num_views, f"Expected {num_views} position maps, got {len(position_maps)}"
-
         position_tensors = []
         for img in position_maps:
             img_np = np.array(img.resize((width, height))) / 255.0
@@ -181,6 +176,7 @@ class MVAdapterPipelineWrapper:
                  normal_maps: List[Image.Image] = None,
                  position_maps: List[Image.Image] = None,
                  camera_info: List[int] = None,
+                 num_views: int = 6,
                  seed: int = 42,
                  height: int = 768,
                  width: int = 768,
@@ -194,7 +190,7 @@ class MVAdapterPipelineWrapper:
                  lora_scale: float = 1.0,
                  save_debug_images: bool = False):
         """
-        Generate multi-view images using the MV-Adapter pipeline.
+        Generate multi-view images using the MV-Adapter pipeline in batches of 6 views.
 
         Args:
             mesh: Trimesh object if using mesh renderer
@@ -202,7 +198,7 @@ class MVAdapterPipelineWrapper:
             normal_maps: List of normal maps if not using mesh renderer
             position_maps: List of position maps if not using mesh renderer
             camera_info: List of camera information if not using mesh renderer
-            num_views: Number of views to generate
+            num_views: Number of views to generate (must be a multiple of 6)
             seed: Random seed for reproducibility
             height: Height of the generated images
             width: Width of the generated images
@@ -216,6 +212,8 @@ class MVAdapterPipelineWrapper:
             lora_scale: Scale for LoRA if used
             save_debug_images: Whether to save intermediate images for debugging
         """
+        if num_views % 6 != 0:
+            raise ValueError(f"Number of views ({num_views}) must be a multiple of 6, got {num_views}")
 
         # Prepare reference image
         if isinstance(image_prompt, str):
@@ -227,19 +225,21 @@ class MVAdapterPipelineWrapper:
 
         # Generate control images
         if use_mesh_renderer and mesh is not None:
-            # Use the MV-Adapter mesh rendering approach
             control_images, pos_images, normal_images = self.generate_control_images_from_mesh(
-                mesh, self.num_views, height, width
+                mesh, height, width
             )
             source = "mesh"
         elif normal_maps is not None and position_maps is not None:
-            # Use the Hunyuan rendered maps
             control_images, pos_images, normal_images = self.generate_control_images_from_maps(
-                normal_maps, position_maps, self.num_views, height, width
+                normal_maps, position_maps, height, width
             )
             source = "maps"
         else:
             raise ValueError("Either mesh or both normal_maps and position_maps must be provided")
+
+        # Ensure control_images matches num_views
+        if control_images.shape[0] != num_views:
+            raise ValueError(f"Expected {num_views} control images, got {control_images.shape[0]}")
 
         # Optionally save control images, position maps, and normal maps for visual inspection
         if save_debug_images:
@@ -251,11 +251,10 @@ class MVAdapterPipelineWrapper:
             norm_tensor = control_images[:, 3:, :, :]
             print(f"pos_tensor shape: {pos_tensor.shape}, norm_tensor shape: {norm_tensor.shape}")
 
-            for i in range(self.num_views):
+            for i in range(num_views):
                 pos_img_tensor = pos_tensor[i].clamp(0, 1).cpu().float()
                 norm_img_tensor = norm_tensor[i].clamp(0, 1).cpu().float()
 
-                # Manual conversion if tensor_to_image fails
                 pos_data = (pos_img_tensor.permute(1, 2, 0).numpy() * 255).astype(np.uint8)
                 norm_data = (norm_img_tensor.permute(1, 2, 0).numpy() * 255).astype(np.uint8)
                 pos_img = Image.fromarray(pos_data)
@@ -267,31 +266,37 @@ class MVAdapterPipelineWrapper:
                 normal_images[i].save(os.path.join(debug_dir, f"orig_norm_view_{i}_{source}.png"))
 
         generator = torch.Generator(device=self.device).manual_seed(seed) if seed != -1 else None
+        all_images = []
 
-        # Run the pipeline
-        output = self.pipeline(
-            prompt,
-            height=height,
-            width=width,
-            num_inference_steps=num_inference_steps,
-            guidance_scale=guidance_scale,
-            num_images_per_prompt=self.num_views,
-            control_image=control_images,
-            control_conditioning_scale=control_conditioning_scale,
-            reference_image=reference_image,
-            reference_conditioning_scale=reference_conditioning_scale,
-            negative_prompt=negative_prompt,
-            generator=generator,
-            cross_attention_kwargs={"scale": lora_scale},
-        )
+        # Process in batches of 6 views
+        for batch_start in range(0, num_views, 6):
+            batch_end = min(batch_start + 6, num_views)
+            batch_control_images = control_images[batch_start:batch_end]
 
-        images = output.images
+            output = self.pipeline(
+                prompt,
+                height=height,
+                width=width,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+                num_images_per_prompt=6,
+                control_image=batch_control_images,
+                control_conditioning_scale=control_conditioning_scale,
+                reference_image=reference_image,
+                reference_conditioning_scale=reference_conditioning_scale,
+                negative_prompt=negative_prompt,
+                generator=generator,
+                cross_attention_kwargs={"scale": lora_scale},
+            )
+
+            batch_images = output.images[:6]  # Take up to 6 images per batch
+            all_images.extend(batch_images)
 
         if save_debug_images:
             import os
             debug_dir = "debug_output_images"
             os.makedirs(debug_dir, exist_ok=True)
-            for i, img in enumerate(images):
+            for i, img in enumerate(all_images):
                 img.save(os.path.join(debug_dir, f"output_image_{i}.png"))
 
-        return images
+        return all_images[:num_views]
