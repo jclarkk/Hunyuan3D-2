@@ -34,7 +34,6 @@ class MVAdapterPipelineWrapper:
             scheduler_class=DDIMScheduler
         )
         pipe.to(device=device, dtype=torch.float16)
-        pipe.cond_encoder.to(device=device, dtype=torch.float16)
         return cls(pipe, device=device)
 
     def __init__(self, pipeline: MVAdapterI2MVSDXLPipeline, device: str):
@@ -217,6 +216,7 @@ class MVAdapterPipelineWrapper:
 
         self.pipeline.load_custom_adapter('huanngzh/mv-adapter', weight_name="mvadapter_ig2mv_sdxl.safetensors")
         self.pipeline.to(device=self.device, dtype=torch.float16)
+        self.pipeline.cond_encoder.to(device=self.device, dtype=torch.float16)
         self.current_num_views = num_views
 
         # Prepare reference image
