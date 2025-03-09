@@ -635,6 +635,7 @@ class MVAdapterI2MVSDXLPipeline(StableDiffusionXLPipeline, CustomAdapterMixin):
                     "cache_hidden_states": ref_hidden_states,
                     "use_mv": False,
                     "use_ref": False,
+                    "num_views": len(control_image) if control_image is not None else None,
                 },
                 return_dict=False,
             )
