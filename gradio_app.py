@@ -318,7 +318,7 @@ def build_app():
                     face_count = gr.Slider(minimum=1000, maximum=100000, step=1000, value=50000, label='Face Count')
                     super_resolution = gr.Radio(['None', 'Aura', 'InvSR', 'Flux', 'SD-Upscaler'],
                                                 label='Super-Resolution (Install the method required, use README in folder)',
-                                                value='Aura')
+                                                value='None')
 
                 with gr.Group():
                     btn = gr.Button(value='Generate Shape Only', variant='primary')
@@ -421,6 +421,7 @@ if __name__ == '__main__':
     parser.add_argument('--host', type=str, default='0.0.0.0')
     parser.add_argument('--cache-path', type=str, default='gradio_cache')
     parser.add_argument('--enable_t23d', action='store_true')
+    parser.add_argument('--use_delight', action='store_true', help='Use Delight model', default=False)
     parser.add_argument('--mv_model', type=str, default='hunyuan3d-paint-v2-0', help='Multiview model to use')
     parser.add_argument('--profile', type=str, default="3")
     parser.add_argument('--verbose', type=str, default="1")
@@ -447,7 +448,8 @@ if __name__ == '__main__':
     try:
         from hy3dgen.texgen import Hunyuan3DPaintPipeline
 
-        texgen_worker = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2', mv_model=args.mv_model)
+        texgen_worker = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2', mv_model=args.mv_model,
+                                                               use_delight=args.use_delight)
         HAS_TEXTUREGEN = True
     except Exception as e:
         print(e)

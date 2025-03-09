@@ -44,11 +44,12 @@ logger = logging.getLogger(__name__)
 
 class Hunyuan3DTexGenConfig:
 
-    def __init__(self, light_remover_ckpt_path, multiview_ckpt_path, mv_model='hunyuan3d-paint-v2-0'):
+    def __init__(self, light_remover_ckpt_path, multiview_ckpt_path, mv_model='hunyuan3d-paint-v2-0', use_delight=False):
         self.device = 'cpu'
         self.mv_model = mv_model
         self.light_remover_ckpt_path = light_remover_ckpt_path
         self.multiview_ckpt_path = multiview_ckpt_path
+        self.use_delight=use_delight
 
         self.candidate_camera_azims = [0, 90, 180, 270, 0, 180]
         self.candidate_camera_elevs = [0, 0, 0, 0, 90, -90]
@@ -67,7 +68,7 @@ class Hunyuan3DTexGenConfig:
 
 class Hunyuan3DPaintPipeline:
     @classmethod
-    def from_pretrained(cls, model_path, mv_model='hunyuan3d-paint-v2-0'):
+    def from_pretrained(cls, model_path, mv_model='hunyuan3d-paint-v2-0', use_delight=False):
         original_model_path = model_path
         if not os.path.exists(model_path):
             # try local path
@@ -85,7 +86,7 @@ class Hunyuan3DPaintPipeline:
                     delight_model_path = os.path.join(model_path, 'hunyuan3d-delight-v2-0')
                     multiview_model_path = os.path.join(model_path, 'hunyuan3d-paint-v2-0')
                     return cls(Hunyuan3DTexGenConfig(delight_model_path, multiview_model_path,
-                                                     mv_model=mv_model))
+                                                     mv_model=mv_model, use_delight=use_delight))
                 except ImportError:
                     logger.warning(
                         "You need to install HuggingFace Hub to load models from the hub."
@@ -93,7 +94,7 @@ class Hunyuan3DPaintPipeline:
                     raise RuntimeError(f"Model path {model_path} not found")
             else:
                 return cls(Hunyuan3DTexGenConfig(delight_model_path, multiview_model_path,
-                                                 mv_model=mv_model))
+                                                 mv_model=mv_model, use_delight=use_delight))
 
         raise FileNotFoundError(f"Model path {original_model_path} not found and we could not find it at huggingface")
 
@@ -110,8 +111,9 @@ class Hunyuan3DPaintPipeline:
         # empty cuda cache
         torch.cuda.empty_cache()
         # Load model
-        self.models['delight_model'] = Light_Shadow_Remover(self.config)
-        print('Delight model loaded')
+        if self.config.use_delight:
+            self.models['delight_model'] = Light_Shadow_Remover(self.config)
+            print('Delight model loaded')
         print(f'Loading multiview model: {self.config.mv_model}')
         if self.config.mv_model == 'hunyuan3d-paint-v2-0':
             self.models['multiview_model'] = Multiview_Diffusion_Net(self.config)
@@ -244,11 +246,16 @@ class Hunyuan3DPaintPipeline:
 
         image_prompt = self.recenter_image(image_prompt)
 
-        print('Removing light and shadow...')
-        t0 = time.time()
-        image_prompt = self.models['delight_model'](image_prompt)
-        t1 = time.time()
-        print(f"Light and shadow removal took {t1 - t0:.2f} seconds")
+        image_prompt.save('initial_reference.png')
+
+        if self.config.use_delight:
+            print('Removing light and shadow...')
+            t0 = time.time()
+            image_prompt = self.models['delight_model'](image_prompt)
+            t1 = time.time()
+            print(f"Light and shadow removal took {t1 - t0:.2f} seconds")
+
+        image_prompt.save('delight_removed.png')
 
         print('Wrapping UV...')
         t0 = time.time()

@@ -60,7 +60,8 @@ def run(args):
     # Load models
     profile = int(args.profile)
     kwargs = {}
-    texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2', mv_model=args.mv_model)
+    texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2', mv_model=args.mv_model,
+                                                              use_delight=args.use_delight)
     print('3D Paint pipeline loaded')
 
     pipe = offload.extract_models("texgen_worker", texture_pipeline)
@@ -140,6 +141,7 @@ if __name__ == "__main__":
                         default=None)
     parser.add_argument('--unwrap_method', type=str,
                         help='UV unwrap method. Must be either "xatlas", "open3d" or "bpy"', default='xatlas')
+    parser.add_argument('--use_delight', action='store_true', help='Use Delight model', default=False)
     parser.add_argument('--mv_model', type=str, default='hunyuan3d-paint-v2-0', help='Multiview model to use')
     parser.add_argument('--upscale_model', type=str, default=None, help='Upscale model to use')
     parser.add_argument('--enhance_texture_angles', action='store_true', help='Enhance texture angles', default=False)

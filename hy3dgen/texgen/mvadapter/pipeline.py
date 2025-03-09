@@ -1,9 +1,11 @@
+import cv2
 import numpy as np
 import torch
 from PIL import Image
-from diffusers import AutoencoderKL, DDIMScheduler
+from diffusers import AutoencoderKL
 from typing import List, Union
 
+from hy3dgen.rmbg import RMBGRemover
 from .models.attention_processor import DecoupledMVRowColSelfAttnProcessor2_0
 from .pipelines.pipeline_mvadapter_i2mv_sdxl import MVAdapterI2MVSDXLPipeline
 from .schedulers.scheduling_shift_snr import ShiftSNRScheduler
@@ -31,7 +33,7 @@ class MVAdapterPipelineWrapper:
             pipe.scheduler,
             shift_mode="interpolated",
             shift_scale=8.0,
-            scheduler_class=DDIMScheduler
+            scheduler_class=None
         )
         pipe.init_custom_adapter(num_views=6, self_attn_processor=DecoupledMVRowColSelfAttnProcessor2_0)
 
@@ -50,8 +52,9 @@ class MVAdapterPipelineWrapper:
         Preprocess RGBA image to remove background and center it (matches standalone preprocess_image).
         """
         if image.mode != "RGBA":
-            image = image.convert("RGB")
-            return image.resize((width, height))
+            # If it doesn't have an alpha channel, convert it to RGBA and create a grey background.
+            bg_handler = RMBGRemover()
+            return bg_handler(image, background_color=[0.5, 0.5, 0.5])
 
         image_np = np.array(image)
         alpha = image_np[..., 3] > 0
@@ -219,6 +222,13 @@ class MVAdapterPipelineWrapper:
             reference_image = image_prompt
 
         reference_image = self.preprocess_reference_image(reference_image, height, width)
+
+        if save_debug_images:
+            import os
+            debug_dir = "debug_control_images"
+            os.makedirs(debug_dir, exist_ok=True)
+
+            reference_image.save(os.path.join(debug_dir, "reference_image.png"))
 
         # Generate control images
         if use_mesh_renderer and mesh is not None:

@@ -411,7 +411,7 @@ class DecoupledMVRowColSelfAttnProcessor2_0(torch.nn.Module):
             value_mv = value_mv.view(batch_size, -1, attn.heads, head_dim)
 
             height = width = math.isqrt(sequence_length)
-            base_batch_size = batch_size // num_views  # Adjust for guidance
+            base_batch_size = batch_size // num_views
 
             query_mv = rearrange(
                 query_mv,
@@ -435,15 +435,16 @@ class DecoupledMVRowColSelfAttnProcessor2_0(torch.nn.Module):
                 iw=width,
             )
 
-            # Dynamic row-wise attention (all views)
+            # Row-wise attention on first 4 views (or fewer if num_views < 4)
+            row_views = min(4, num_views)
             query_mv_row = rearrange(
-                query_mv, "b nv ih iw h c -> (b ih) h (nv iw) c"
+                query_mv[:, :row_views], "b nv ih iw h c -> (b ih) h (nv iw) c"
             )
             key_mv_row = rearrange(
-                key_mv, "b nv ih iw h c -> (b ih) h (nv iw) c"
+                key_mv[:, :row_views], "b nv ih iw h c -> (b ih) h (nv iw) c"
             )
             value_mv_row = rearrange(
-                value_mv, "b nv ih iw h c -> (b ih) h (nv iw) c"
+                value_mv[:, :row_views], "b nv ih iw h c -> (b ih) h (nv iw) c"
             )
             hidden_states_mv_row = F.scaled_dot_product_attention(
                 query_mv_row, key_mv_row, value_mv_row, dropout_p=0.0, is_causal=False
@@ -452,19 +453,23 @@ class DecoupledMVRowColSelfAttnProcessor2_0(torch.nn.Module):
                 hidden_states_mv_row,
                 "(b ih) h (nv iw) c -> b nv (ih iw) (h c)",
                 b=base_batch_size,
-                nv=num_views,
+                nv=row_views,
                 ih=height,
             )
 
-            # Dynamic column-wise attention (all views)
+            # Column-wise attention on a subset (e.g., views 0, 2, 4, 5 if available)
+            col_views_indices = [0, 2, 4, 5][:min(4, num_views)]  # Adjust based on num_views
+            query_mv_col = query_mv[:, col_views_indices]
+            key_mv_col = key_mv[:, col_views_indices]
+            value_mv_col = value_mv[:, col_views_indices]
             query_mv_col = rearrange(
-                query_mv, "b nv ih iw h c -> (b iw) h (nv ih) c"
+                query_mv_col, "b nv ih iw h c -> (b iw) h (nv ih) c"
             )
             key_mv_col = rearrange(
-                key_mv, "b nv ih iw h c -> (b iw) h (nv ih) c"
+                key_mv_col, "b nv ih iw h c -> (b iw) h (nv ih) c"
             )
             value_mv_col = rearrange(
-                value_mv, "b nv ih iw h c -> (b iw) h (nv ih) c"
+                value_mv_col, "b nv ih iw h c -> (b iw) h (nv ih) c"
             )
             hidden_states_mv_col = F.scaled_dot_product_attention(
                 query_mv_col, key_mv_col, value_mv_col, dropout_p=0.0, is_causal=False
@@ -473,12 +478,23 @@ class DecoupledMVRowColSelfAttnProcessor2_0(torch.nn.Module):
                 hidden_states_mv_col,
                 "(b iw) h (nv ih) c -> b nv (ih iw) (h c)",
                 b=base_batch_size,
-                nv=num_views,
+                nv=len(col_views_indices),
                 ih=height,
             )
 
-            # Combine row and column results (average all views)
-            hidden_states_mv = (hidden_states_mv_row + hidden_states_mv_col) / 2
+            # Combine: Extend to full num_views, averaging where overlap occurs
+            hidden_states_mv = torch.zeros(
+                base_batch_size, num_views, height * width, attn.heads * head_dim,
+                device=hidden_states.device, dtype=hidden_states.dtype
+            )
+            for i in range(row_views):
+                hidden_states_mv[:, i] = hidden_states_mv_row[:, i]
+            for i, idx in enumerate(col_views_indices):
+                if idx < row_views:
+                    hidden_states_mv[:, idx] = (hidden_states_mv[:, idx] + hidden_states_mv_col[:, i]) / 2
+                else:
+                    hidden_states_mv[:, idx] = hidden_states_mv_col[:, i]
+
             hidden_states_mv = hidden_states_mv.view(-1, hidden_states_mv.shape[-2], hidden_states_mv.shape[-1])
             hidden_states_mv = hidden_states_mv.to(query.dtype)
 
