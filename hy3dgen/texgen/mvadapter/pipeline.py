@@ -217,7 +217,6 @@ class MVAdapterPipelineWrapper:
 
         self.pipeline.load_custom_adapter('huanngzh/mv-adapter', weight_name="mvadapter_ig2mv_sdxl.safetensors")
         self.pipeline.to(device=self.device, dtype=torch.float16)
-        self.pipeline.cond_encoder.to(device=self.device, dtype=torch.float16)
         self.current_num_views = num_views
 
         # Prepare reference image
