@@ -60,8 +60,7 @@ def run(args):
     # Load models
     profile = int(args.profile)
     kwargs = {}
-    texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2', mv_model=args.mv_model,
-                                                              enhance_texture_angles=args.enhance_texture_angles)
+    texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2', mv_model=args.mv_model)
     print('3D Paint pipeline loaded')
 
     pipe = offload.extract_models("texgen_worker", texture_pipeline)
@@ -110,6 +109,7 @@ def run(args):
         pbr=args.pbr,
         debug=args.debug,
         texture_size=args.texture_size,
+        enhance_texture_angles=args.enhance_texture_angles,
         seed=args.seed
     )
     t7 = time.time()
