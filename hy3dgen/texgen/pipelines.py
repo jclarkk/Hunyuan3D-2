@@ -122,8 +122,13 @@ class Hunyuan3DPaintPipeline:
     def render_normal_multiview(self, camera_elevs, camera_azims, use_abs_coor=True):
         normal_maps = []
         for elev, azim in zip(camera_elevs, camera_azims):
+            if self.config.mv_model == 'mv-adapter':
+                bg_color = [0.5, 0.5, 0.5]
+            else:
+                bg_color = [1, 1, 1]
+
             normal_map = self.render.render_normal(
-                elev, azim, use_abs_coor=use_abs_coor, return_type='pl')
+                elev, azim, use_abs_coor=use_abs_coor, return_type='pl', bg_color=bg_color)
             normal_maps.append(normal_map)
 
         return normal_maps
@@ -131,8 +136,13 @@ class Hunyuan3DPaintPipeline:
     def render_position_multiview(self, camera_elevs, camera_azims):
         position_maps = []
         for elev, azim in zip(camera_elevs, camera_azims):
+            if self.config.mv_model == 'mv-adapter':
+                bg_color = [0.5, 0.5, 0.5]
+            else:
+                bg_color = [1, 1, 1]
+
             position_map = self.render.render_position(
-                elev, azim, return_type='pl')
+                elev, azim, return_type='pl', bg_color=bg_color)
             position_maps.append(position_map)
 
         return position_maps
@@ -285,7 +295,7 @@ class Hunyuan3DPaintPipeline:
         if self.config.mv_model == 'hunyuan3d-paint-v2-0':
             multiviews = self.models['multiview_model'](image_prompt, normal_maps + position_maps, camera_info)
         elif self.config.mv_model == 'mv-adapter':
-            multiviews = self.models['multiview_model'](image_prompt, normal_maps, position_maps, camera_info,
+            multiviews = self.models['multiview_model'](mesh, image_prompt, normal_maps, position_maps, camera_info,
                                                         len(selected_camera_azims))
         else:
             raise ValueError(f"Invalid MV model {self.config.mv_model}")

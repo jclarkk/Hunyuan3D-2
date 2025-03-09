@@ -182,6 +182,7 @@ def load_mesh(
             v_tex[:, 1] = 1.0 - v_tex[:, 1]
         t_tex_idx = t_pos_idx.clone()
         if (
+            hasattr(mesh.visual, 'material') and
             hasattr(mesh.visual.material, "baseColorTexture")
             and mesh.visual.material.baseColorTexture
         ):
