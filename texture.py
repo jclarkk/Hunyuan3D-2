@@ -95,7 +95,8 @@ def run(args):
     t4 = time.time()
     # Preprocess the image
     rmbg_remover = RMBGRemover()
-    image = rmbg_remover(image)
+    if args.mv_model == 'hunyuan3d-paint-v2-0':
+        image = rmbg_remover(image)
 
     t5 = time.time()
     print(f"Image processing took {t5 - t4:.2f} seconds")

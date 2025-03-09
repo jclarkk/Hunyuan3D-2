@@ -38,7 +38,6 @@ class MVAdapterPipelineWrapper:
         pipe.init_custom_adapter(num_views=6, self_attn_processor=DecoupledMVRowColSelfAttnProcessor2_0)
 
         pipe.load_custom_adapter('huanngzh/mv-adapter', weight_name="mvadapter_ig2mv_sdxl.safetensors")
-        pipe.to(device=device, dtype=torch.float16)
         pipe.cond_encoder.to(device=device, dtype=torch.float16)
         pipe.to(device=device, dtype=torch.float16)
         return cls(pipe, device=device)
@@ -54,7 +53,7 @@ class MVAdapterPipelineWrapper:
         if image.mode != "RGBA":
             # If it doesn't have an alpha channel, convert it to RGBA and create a grey background.
             bg_handler = RMBGRemover()
-            return bg_handler(image, background_color=[0.5, 0.5, 0.5])
+            return bg_handler(image, height=height, width=width, background_color=[0.5, 0.5, 0.5])
 
         image_np = np.array(image)
         alpha = image_np[..., 3] > 0
@@ -184,7 +183,7 @@ class MVAdapterPipelineWrapper:
                  height: int = 768,
                  width: int = 768,
                  num_inference_steps: int = 50,
-                 guidance_scale: float = 3.0,
+                 guidance_scale: float = 3.5,
                  reference_conditioning_scale: float = 1.0,
                  control_conditioning_scale: float = 1.0,
                  prompt: str = "high quality",

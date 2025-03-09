@@ -6,7 +6,8 @@ from transformers import AutoModelForImageSegmentation
 
 
 class RMBGRemover:
-    def __call__(self, input: Image.Image, background_color: list[float] = [1.0, 1.0, 1.0]) -> Image.Image:
+    def __call__(self, input: Image.Image, height=518, width=518,
+                 background_color: list[float] = [1.0, 1.0, 1.0]) -> Image.Image:
         """
         Preprocess the input image with a customizable background color.
         background_color: List of 3 floats [R, G, B] in range 0-1 (default: [1.0, 1.0, 1.0] for white)
@@ -57,22 +58,14 @@ class RMBGRemover:
         size = int(size * 1.2)
         bbox = center[0] - size // 2, center[1] - size // 2, center[0] + size // 2, center[1] + size // 2
         output = output.crop(bbox)  # type: ignore
-        output = output.resize((518, 518), Image.Resampling.LANCZOS)
+        output = output.resize((height, width), Image.Resampling.LANCZOS)
 
-        # Convert background_color from 0-1 range to 0-255 range
         bg_rgb = tuple(int(c * 255) for c in background_color)
-
-        # Create a background with the specified color
-        colored_bg = Image.new('RGB', output.size, bg_rgb)
-
-        # Composite the image over the colored background
-        if output.mode == 'RGBA':
-            colored_bg.paste(output, mask=output.split()[3])  # Use alpha channel as mask
-            output = colored_bg
-        else:
-            # If somehow the image is not RGBA, convert it
+        colored_bg = Image.new('RGBA', output.size, bg_rgb + (255,))
+        # Ensure output has alpha channel
+        if output.mode != 'RGBA':
             output = output.convert('RGBA')
-            colored_bg.paste(output, mask=output.split()[3])
-            output = colored_bg
+        # Composite output onto colored background preserving alpha
+        colored_bg.alpha_composite(output)
 
-        return output
+        return colored_bg

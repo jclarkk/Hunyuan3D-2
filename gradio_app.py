@@ -171,6 +171,7 @@ def generation_all(
         pbr=False,
         texture_size=1024
 ):
+    original_image = image.copy()
     mesh, image, save_folder = _gen_shape(
         caption,
         image,
@@ -187,7 +188,7 @@ def generation_all(
 
     textured_mesh = texgen_worker(
         mesh,
-        image,
+        original_image,
         upscale_model=upscale_model,
         enhance_texture_angles=enhance_texture_angles,
         pbr=pbr,

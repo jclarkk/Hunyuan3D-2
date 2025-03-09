@@ -63,7 +63,7 @@ def run(args):
     pipe = offload.extract_models("mesh_worker", mesh_pipeline)
 
     if args.texture:
-        texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2')
+        texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2', mv_model=args.mv_model)
         print('3D Paint pipeline loaded')
 
         pipe.update(offload.extract_models("texgen_worker", texture_pipeline))
@@ -91,6 +91,8 @@ def run(args):
         del mesh_pipeline
         torch.cuda.empty_cache()
 
+        # Reload image to use maximum possible resolution for texture model
+        image = Image.open(image_path)
         t4 = time.time()
         mesh = texture_pipeline(mesh, image=image, unwrap_method=args.unwrap_method, seed=args.seed)
         t5 = time.time()
@@ -126,6 +128,7 @@ if __name__ == "__main__":
                         help='UV unwrap method. Must be either "xatlas", "open3d" or "bpy"', default='xatlas')
     parser.add_argument('--face_count', type=int, default=100000, help='Maximum face count for the mesh')
     parser.add_argument('--texture', action='store_true', help='Texture the mesh', default=False)
+    parser.add_argument('--mv_model', type=str, default='hunyuan3d-paint-v2-0', help='Multiview model to use')
     parser.add_argument('--profile', type=str, default="3")
     parser.add_argument('--verbose', type=str, default="1")
 

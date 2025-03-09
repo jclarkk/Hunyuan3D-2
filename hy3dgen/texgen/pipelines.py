@@ -179,7 +179,8 @@ class Hunyuan3DPaintPipeline:
                 project_textures, project_weighted_cos_maps)
 
             texture = texture.clone().detach().float()
-            texture = self.render.color_rgb_to_srgb(texture)
+            if self.config.use_delight:
+                texture = self.render.color_rgb_to_srgb(texture)
         else:
             raise f'no method {method}'
         return texture, ori_trust_map > 1E-8
