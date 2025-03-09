@@ -264,6 +264,12 @@ def build_app():
                 <p class="text-gray-600">• Quad Remeshing using InstantMeshes or BPT</p>
                 <p class="text-gray-600">• Added face count and texture resolution options</p>
             </div>
+            
+            <div class="space-y-2">
+                <h3 class="font-semibold text-lg text-gray-700">Multi view model</h3>
+                <p class="text-gray-600">Hunyuan Paint / MV-Adapter</p>
+                <p class="text-gray-500 text-sm">How-to: <code class="bg-gray-100 px-2 py-1 rounded">python gradio_app.py --mv_model "mv-adapter"</code></p>
+            </div>
 
             <div class="space-y-2">
                 <h3 class="font-semibold text-lg text-gray-700">Super Resolution</h3>
@@ -415,6 +421,7 @@ if __name__ == '__main__':
     parser.add_argument('--host', type=str, default='0.0.0.0')
     parser.add_argument('--cache-path', type=str, default='gradio_cache')
     parser.add_argument('--enable_t23d', action='store_true')
+    parser.add_argument('--mv_model', type=str, default='hunyuan3d-paint-v2-0', help='Multiview model to use')
     parser.add_argument('--profile', type=str, default="3")
     parser.add_argument('--verbose', type=str, default="1")
     args = parser.parse_args()
@@ -440,7 +447,7 @@ if __name__ == '__main__':
     try:
         from hy3dgen.texgen import Hunyuan3DPaintPipeline
 
-        texgen_worker = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2')
+        texgen_worker = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2', mv_model=args.mv_model)
         HAS_TEXTUREGEN = True
     except Exception as e:
         print(e)

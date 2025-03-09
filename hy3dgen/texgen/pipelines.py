@@ -128,8 +128,14 @@ class Hunyuan3DPaintPipeline:
                 bg_color = [1, 1, 1]
 
             normal_map = self.render.render_normal(
-                elev, azim, use_abs_coor=use_abs_coor, return_type='pl', bg_color=bg_color)
-            normal_maps.append(normal_map)
+                elev, azim, use_abs_coor=use_abs_coor, return_type='th', bg_color=bg_color
+            )
+            # Remove batch dimension if present
+            if normal_map.dim() == 4 and normal_map.shape[0] == 1:
+                normal_map = normal_map.squeeze(0)
+
+            normal_map_pil = Image.fromarray((normal_map.cpu().numpy() * 255).astype(np.uint8))
+            normal_maps.append(normal_map_pil)
 
         return normal_maps
 
@@ -142,8 +148,14 @@ class Hunyuan3DPaintPipeline:
                 bg_color = [1, 1, 1]
 
             position_map = self.render.render_position(
-                elev, azim, return_type='pl', bg_color=bg_color)
-            position_maps.append(position_map)
+                elev, azim, return_type='th', bg_color=bg_color
+            )
+            # Remove batch dimension if present
+            if position_map.dim() == 4 and position_map.shape[0] == 1:
+                position_map = position_map.squeeze(0)
+
+            position_map_pil = Image.fromarray((position_map.cpu().numpy() * 255).astype(np.uint8))
+            position_maps.append(position_map_pil)
 
         return position_maps
 

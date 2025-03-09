@@ -494,23 +494,26 @@ class MeshRender():
         normal, _ = self.raster_interpolate(
             vertex_normals[None, ...], rast_out, self.pos_idx)
 
-        visible_mask = torch.clamp(rast_out[..., -1:], 0, 1)
-        normal = normal * visible_mask + \
-                 torch.tensor(bg_color, dtype=torch.float32, device=self.device) * (1 -
-                                                                                    visible_mask)  # Mask out background.
+        visible_mask = torch.clamp(rast_out[..., -1:], 0, 1)  # [1, H, W, 1]
+        print(
+            f"Visible mask shape: {visible_mask.shape}, min: {visible_mask.min().item():.4f}, max: {visible_mask.max().item():.4f}")
 
         if normalize_rgb:
-            normal = (normal + 1) * 0.5
+            normal = (normal + 1) * 0.5  # Now in [0, 1]
+
+        # Apply background after normalization
+        normal = normal * visible_mask + torch.tensor(bg_color, dtype=torch.float32, device=self.device) * (
+                    1 - visible_mask)
+
         if self.use_antialias:
             normal = self.raster_antialias(normal, rast_out, pos_clip, self.pos_idx)
 
-        image = normal[0, ...]
+        image = normal
         if return_type == 'np':
             image = image.cpu().numpy()
         elif return_type == 'pl':
-            image = image.cpu().numpy() * 255
-            image = Image.fromarray(image.astype(np.uint8))
-
+            image = (image.cpu().numpy() * 255).astype(np.uint8)
+            image = Image.fromarray(image)
         return image
 
     def convert_normal_map(self, image):

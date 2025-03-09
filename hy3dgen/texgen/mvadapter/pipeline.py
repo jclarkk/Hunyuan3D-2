@@ -7,7 +7,7 @@ from typing import List, Union
 from .models.attention_processor import DecoupledMVRowColSelfAttnProcessor2_0
 from .pipelines.pipeline_mvadapter_i2mv_sdxl import MVAdapterI2MVSDXLPipeline
 from .schedulers.scheduling_shift_snr import ShiftSNRScheduler
-from .utils import get_orthogonal_camera, tensor_to_image, make_image_grid
+from .utils import get_orthogonal_camera, tensor_to_image
 from .utils.render import NVDiffRastContextWrapper, load_mesh, render
 
 
@@ -88,7 +88,8 @@ class MVAdapterPipelineWrapper:
         Generate control images from a mesh using the original pipeline's approach.
         """
         # Load the mesh
-        mesh = load_mesh(mesh, rescale=True, device=self.device)
+        mesh_copy = mesh.copy()
+        current_mesh = load_mesh(mesh_copy, rescale=True, device=self.device)
 
         # Prepare cameras using the same parameters as the original implementation
         cameras = get_orthogonal_camera(
@@ -105,7 +106,7 @@ class MVAdapterPipelineWrapper:
         # Render the mesh
         render_out = render(
             self.ctx,
-            mesh,
+            current_mesh,
             cameras,
             height=height,
             width=width,
@@ -210,7 +211,7 @@ class MVAdapterPipelineWrapper:
             save_debug_images: Whether to save intermediate images for debugging
         """
 
-        # Initialize the pipeline with the custom adapter since we can only declate num of views at call-time.
+        # Initialize the pipeline with the custom adapter since we can only declare num of views at call-time.
         self.pipeline.init_custom_adapter(num_views=num_views,
                                           self_attn_processor=DecoupledMVRowColSelfAttnProcessor2_0)
 
@@ -233,13 +234,42 @@ class MVAdapterPipelineWrapper:
             control_images, pos_images, normal_images = self.generate_control_images_from_mesh(
                 mesh, num_views, height, width
             )
+            source = "mesh"
         elif normal_maps is not None and position_maps is not None:
             # Use the Hunyuan rendered maps
             control_images, pos_images, normal_images = self.generate_control_images_from_maps(
                 normal_maps, position_maps, num_views, height, width
             )
+            source = "maps"
         else:
-            raise ValueError("Either mesh_path or both normal_maps and position_maps must be provided")
+            raise ValueError("Either mesh or both normal_maps and position_maps must be provided")
+
+        # Optionally save control images, position maps, and normal maps for visual inspection
+        if save_debug_images:
+            import os
+            debug_dir = "debug_control_images"
+            os.makedirs(debug_dir, exist_ok=True)
+
+            pos_tensor = control_images[:, :3, :, :]
+            norm_tensor = control_images[:, 3:, :, :]
+            print(f"pos_tensor shape: {pos_tensor.shape}, norm_tensor shape: {norm_tensor.shape}")
+
+            for i in range(num_views):
+                pos_img_tensor = pos_tensor[i].clamp(0, 1).cpu().float()
+                norm_img_tensor = norm_tensor[i].clamp(0, 1).cpu().float()
+                print(
+                    f"View {i} - pos_img_tensor shape: {pos_img_tensor.shape}, norm_img_tensor shape: {norm_img_tensor.shape}")
+
+                # Manual conversion if tensor_to_image fails
+                pos_data = (pos_img_tensor.permute(1, 2, 0).numpy() * 255).astype(np.uint8)
+                norm_data = (norm_img_tensor.permute(1, 2, 0).numpy() * 255).astype(np.uint8)
+                pos_img = Image.fromarray(pos_data)
+                norm_img = Image.fromarray(norm_data)
+
+                pos_img.save(os.path.join(debug_dir, f"control_pos_view_{i}_{source}.png"))
+                norm_img.save(os.path.join(debug_dir, f"control_norm_view_{i}_{source}.png"))
+                pos_images[i].save(os.path.join(debug_dir, f"orig_pos_view_{i}_{source}.png"))
+                normal_images[i].save(os.path.join(debug_dir, f"orig_norm_view_{i}_{source}.png"))
 
         generator = torch.Generator(device=self.device).manual_seed(seed) if seed != -1 else None
 
@@ -261,5 +291,12 @@ class MVAdapterPipelineWrapper:
         )
 
         images = output.images
+
+        if save_debug_images:
+            import os
+            debug_dir = "debug_output_images"
+            os.makedirs(debug_dir, exist_ok=True)
+            for i, img in enumerate(images):
+                img.save(os.path.join(debug_dir, f"output_image_{i}.png"))
 
         return images
