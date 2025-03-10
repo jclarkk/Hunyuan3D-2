@@ -12,20 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import inspect
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
-import numpy as np
 import PIL
 import torch
-import torch.nn as nn
 from diffusers.image_processor import PipelineImageInput, VaeImageProcessor
 from diffusers.models import (
     AutoencoderKL,
-    ImageProjection,
     T2IAdapter,
     UNet2DConditionModel,
 )
+from diffusers.models.attention_processor import XFormersAttnProcessor
 from diffusers.pipelines.stable_diffusion_xl.pipeline_output import (
     StableDiffusionXLPipelineOutput,
 )
@@ -37,7 +34,6 @@ from diffusers.pipelines.stable_diffusion_xl.pipeline_stable_diffusion_xl import
 from diffusers.schedulers import KarrasDiffusionSchedulers
 from diffusers.utils import deprecate, logging
 from diffusers.utils.torch_utils import randn_tensor
-from einops import rearrange
 from transformers import (
     CLIPImageProcessor,
     CLIPTextModel,
@@ -955,58 +951,3 @@ class MVAdapterI2MVSDXLPipeline(StableDiffusionXLPipeline, CustomAdapterMixin):
         state_dict.update(self.cond_encoder.state_dict())
 
         return state_dict
-
-
-from diffusers.models.attention_processor import XFormersAttnProcessor
-
-
-class MVAdapterXFormersAttnProcessor(XFormersAttnProcessor):
-    def __init__(self, attention_op=None):
-        super().__init__(attention_op=attention_op)
-
-    def __call__(
-            self,
-            attn,
-            hidden_states,
-            encoder_hidden_states=None,
-            attention_mask=None,
-            temb=None,
-            scale=1.0,
-            cache_hidden_states=None,
-            use_mv=False,
-            use_ref=False,
-            num_views=None,
-            mv_scale=1.0,
-            ref_hidden_states=None,
-            ref_scale=1.0,
-            **kwargs
-    ):
-        # Simply ignore the custom parameters but don't warn about them
-        # Then call the parent implementation
-        return super().__call__(
-            attn,
-            hidden_states,
-            encoder_hidden_states=encoder_hidden_states,
-            attention_mask=attention_mask,
-            temb=temb,
-            scale=scale,
-        )
-
-
-def enable_mv_adapter_xformers_memory_efficient_attention(self):
-    try:
-        import xformers
-        import xformers.ops
-        from diffusers.models.attention_processor import AttnProcessor
-
-        processor = MVAdapterXFormersAttnProcessor()
-        self.unet.set_attn_processor(processor)
-
-        return True
-    except ImportError:
-        print("xFormers not available. Falling back to standard attention.")
-        return False
-
-
-MVAdapterI2MVSDXLPipeline.enable_mv_adapter_xformers_memory_efficient_attention = enable_mv_adapter_xformers_memory_efficient_attention
-

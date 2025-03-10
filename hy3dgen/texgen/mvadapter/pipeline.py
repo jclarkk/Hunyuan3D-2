@@ -1,4 +1,3 @@
-import cv2
 import numpy as np
 import torch
 from PIL import Image
@@ -10,6 +9,7 @@ from .models.attention_processor import DecoupledMVRowColSelfAttnProcessor2_0
 from .pipelines.pipeline_mvadapter_i2mv_sdxl import MVAdapterI2MVSDXLPipeline
 from .schedulers.scheduling_shift_snr import ShiftSNRScheduler
 from .utils import get_orthogonal_camera, tensor_to_image
+from .utils.warnings_filter import filter_stdout
 
 
 class MVAdapterPipelineWrapper:
@@ -39,7 +39,13 @@ class MVAdapterPipelineWrapper:
         pipe.load_custom_adapter('huanngzh/mv-adapter', weight_name="mvadapter_ig2mv_sdxl.safetensors")
         pipe.cond_encoder.to(device=device, dtype=torch.float16)
         pipe.to(device=device, dtype=torch.float16)
-        pipe.enable_mv_adapter_xformers_memory_efficient_attention()
+
+        try:
+            import xformers
+            pipe.unet.enable_xformers_memory_efficient_attention()
+        except ImportError:
+            print('Warning: XFormers not available, using default attention processor')
+
         return cls(pipe, device=device)
 
     def __init__(self, pipeline: MVAdapterI2MVSDXLPipeline, device: str):
@@ -271,21 +277,22 @@ class MVAdapterPipelineWrapper:
         generator = torch.Generator(device=self.device).manual_seed(seed) if seed != -1 else None
 
         # Run the pipeline
-        output = self.pipeline(
-            prompt,
-            height=height,
-            width=width,
-            num_inference_steps=num_inference_steps,
-            guidance_scale=guidance_scale,
-            num_images_per_prompt=num_views,
-            control_image=control_images,
-            control_conditioning_scale=control_conditioning_scale,
-            reference_image=reference_image,
-            reference_conditioning_scale=reference_conditioning_scale,
-            negative_prompt=negative_prompt,
-            generator=generator,
-            cross_attention_kwargs={"scale": lora_scale},
-        )
+        with filter_stdout():
+            output = self.pipeline(
+                prompt,
+                height=height,
+                width=width,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+                num_images_per_prompt=num_views,
+                control_image=control_images,
+                control_conditioning_scale=control_conditioning_scale,
+                reference_image=reference_image,
+                reference_conditioning_scale=reference_conditioning_scale,
+                negative_prompt=negative_prompt,
+                generator=generator,
+                cross_attention_kwargs={"scale": lora_scale},
+            )
 
         images = output.images
 
