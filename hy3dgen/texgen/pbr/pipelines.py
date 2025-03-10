@@ -3,7 +3,7 @@ import torch
 from PIL import Image
 from diffusers import DDIMScheduler
 
-from .rgb2x_pipeline import StableDiffusionAOVMatEstPipeline
+from .rgbx import StableDiffusionAOVMatEstPipeline
 
 
 class RGB2XPipeline:
