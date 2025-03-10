@@ -179,7 +179,7 @@ class MVAdapterPipelineWrapper:
                  height: int = 768,
                  width: int = 768,
                  num_inference_steps: int = 50,
-                 guidance_scale: float = 3.5,
+                 guidance_scale: float = 3.0,
                  reference_conditioning_scale: float = 1.0,
                  control_conditioning_scale: float = 1.0,
                  prompt: str = "high quality",

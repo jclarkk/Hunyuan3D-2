@@ -44,19 +44,22 @@ logger = logging.getLogger(__name__)
 
 class Hunyuan3DTexGenConfig:
 
-    def __init__(self, light_remover_ckpt_path, multiview_ckpt_path, mv_model='hunyuan3d-paint-v2-0', use_delight=False):
+    def __init__(self, light_remover_ckpt_path, multiview_ckpt_path, mv_model='hunyuan3d-paint-v2-0',
+                 use_delight=False):
         self.device = 'cpu'
         self.mv_model = mv_model
         self.light_remover_ckpt_path = light_remover_ckpt_path
         self.multiview_ckpt_path = multiview_ckpt_path
-        self.use_delight=use_delight
+        self.use_delight = use_delight
 
         self.candidate_camera_azims = [0, 90, 180, 270, 0, 180]
         self.candidate_camera_elevs = [0, 0, 0, 0, 90, -90]
         self.candidate_view_weights = [1, 0.1, 0.5, 0.1, 0.1, 0.1]
 
-        self.candidate_camera_azims_enhanced = [0, 90, 180, 270, 0, 180, 90, 270, 45, 135, 225, 310, 45, 135, 225, 310, 0, 180]
-        self.candidate_camera_elevs_enhanced = [0, 0, 0, 0, 90, -90, -45, -45, 15, 15, 15, 15, -15, -15, -15, -15, 15, 15]
+        self.candidate_camera_azims_enhanced = [0, 90, 180, 270, 0, 180, 90, 270, 45, 135, 225, 310, 45, 135, 225, 310,
+                                                0, 180]
+        self.candidate_camera_elevs_enhanced = [0, 0, 0, 0, 90, -90, -45, -45, 15, 15, 15, 15, -15, -15, -15, -15, 15,
+                                                15]
         self.candidate_view_weights_enhanced = [1, 0.1, 0.5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1,
                                                 0.1, 0.1, 0.1]
 
@@ -247,8 +250,6 @@ class Hunyuan3DPaintPipeline:
 
         image_prompt = self.recenter_image(image_prompt)
 
-        image_prompt.save('initial_reference.png')
-
         if self.config.use_delight:
             print('Removing light and shadow...')
             t0 = time.time()
@@ -260,8 +261,6 @@ class Hunyuan3DPaintPipeline:
             image_prompt = self.models['delight_model'](image_prompt, height, width)
             t1 = time.time()
             print(f"Light and shadow removal took {t1 - t0:.2f} seconds")
-
-        image_prompt.save('delight_removed.png')
 
         print('Wrapping UV...')
         t0 = time.time()
@@ -321,7 +320,7 @@ class Hunyuan3DPaintPipeline:
             multiviews = self.models['multiview_model'](image_prompt, normal_maps + position_maps, camera_info)
         elif self.config.mv_model == 'mv-adapter':
             multiviews = self.models['multiview_model'](mesh, image_prompt, normal_maps, position_maps, camera_info,
-                                                        len(selected_camera_azims))
+                                                        len(selected_camera_azims), seed=seed)
         else:
             raise ValueError(f"Invalid MV model {self.config.mv_model}")
         t1 = time.time()
