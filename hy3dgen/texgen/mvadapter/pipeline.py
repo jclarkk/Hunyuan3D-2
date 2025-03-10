@@ -39,9 +39,10 @@ class MVAdapterPipelineWrapper:
         pipe.load_custom_adapter('huanngzh/mv-adapter', weight_name="mvadapter_ig2mv_sdxl.safetensors")
         pipe.cond_encoder.to(device=device, dtype=torch.float16)
         pipe.to(device=device, dtype=torch.float16)
+        pipe.enable_mv_adapter_xformers_memory_efficient_attention()
         return cls(pipe, device=device)
 
-    def __init__(self, pipeline: MVAdapterI2MVSDXLPipeline, device: str, num_views: int = 6):
+    def __init__(self, pipeline: MVAdapterI2MVSDXLPipeline, device: str):
         self.pipeline = pipeline
         self.device = device
 
@@ -135,7 +136,7 @@ class MVAdapterPipelineWrapper:
 
         return control_images, pos_images, normal_images
 
-    def generate_control_images_from_maps(self, normal_maps, position_maps, num_views, height, width):
+    def generate_control_images_from_maps(self, normal_maps, position_maps, height, width):
         """
         Generate control images from Hunyuan's pre-rendered normal and position maps.
         """
@@ -236,7 +237,7 @@ class MVAdapterPipelineWrapper:
         elif normal_maps is not None and position_maps is not None:
             # Use the Hunyuan rendered maps
             control_images, pos_images, normal_images = self.generate_control_images_from_maps(
-                normal_maps, position_maps, num_views, height, width
+                normal_maps, position_maps, height, width
             )
             source = "maps"
         else:
