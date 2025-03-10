@@ -10,7 +10,6 @@ from .models.attention_processor import DecoupledMVRowColSelfAttnProcessor2_0
 from .pipelines.pipeline_mvadapter_i2mv_sdxl import MVAdapterI2MVSDXLPipeline
 from .schedulers.scheduling_shift_snr import ShiftSNRScheduler
 from .utils import get_orthogonal_camera, tensor_to_image
-from .utils.render import NVDiffRastContextWrapper, load_mesh, render
 
 
 class MVAdapterPipelineWrapper:
@@ -93,6 +92,8 @@ class MVAdapterPipelineWrapper:
         """
         Generate control images from a mesh using the original pipeline's approach.
         """
+        from .utils.render import NVDiffRastContextWrapper, load_mesh, render
+
         # Load the mesh
         mesh_copy = mesh.copy()
         current_mesh = load_mesh(mesh_copy, rescale=True, device=self.device)
