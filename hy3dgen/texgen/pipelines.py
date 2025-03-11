@@ -196,38 +196,57 @@ class Hunyuan3DPaintPipeline:
         return texture
 
     def recenter_image(self, image, border_ratio=0.2):
+        # Convert image to RGBA if it isn't already
         if image.mode == 'RGB':
-            return image
+            image = image.convert('RGBA')
         elif image.mode == 'L':
-            image = image.convert('RGB')
-            return image
+            image = image.convert('RGBA')
+        elif image.mode != 'RGBA':
+            image = image.convert('RGBA')
 
+        # Get alpha channel and find non-transparent area
         alpha_channel = np.array(image)[:, :, 3]
         non_zero_indices = np.argwhere(alpha_channel > 0)
         if non_zero_indices.size == 0:
             raise ValueError("Image is fully transparent")
 
+        # Crop to content
         min_row, min_col = non_zero_indices.min(axis=0)
         max_row, max_col = non_zero_indices.max(axis=0)
-
         cropped_image = image.crop((min_col, min_row, max_col + 1, max_row + 1))
 
+        # Calculate new dimensions with border
         width, height = cropped_image.size
         border_width = int(width * border_ratio)
         border_height = int(height * border_ratio)
-
         new_width = width + 2 * border_width
         new_height = height + 2 * border_height
-
         square_size = max(new_width, new_height)
 
+        # Create new image with transparent background
         new_image = Image.new('RGBA', (square_size, square_size), (255, 255, 255, 0))
 
+        # Calculate paste position
         paste_x = (square_size - new_width) // 2 + border_width
         paste_y = (square_size - new_height) // 2 + border_height
 
+        # Paste the cropped image
         new_image.paste(cropped_image, (paste_x, paste_y))
-        return new_image
+
+        # Convert to numpy array for alpha blending
+        image_array = np.array(new_image)
+
+        image_out = image_array.astype(np.float32) / 255.0
+
+        if self.config.mv_model == 'mv-adapter':
+            # Apply alpha blending with gray background (0.5 = 50% gray)
+            rgb = image_out[:, :, :3]
+            alpha = image_out[:, :, 3:4]
+            image_out = rgb * alpha + (1 - alpha) * 0.5
+            image_out = (image_out * 255).clip(0, 255).astype(np.uint8)
+
+        # Convert back to RGBA Image
+        return Image.fromarray(np.dstack((image_out, alpha_channel)), 'RGBA')
 
     @torch.no_grad()
     def __call__(self,

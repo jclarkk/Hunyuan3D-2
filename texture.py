@@ -60,7 +60,8 @@ def run(args):
     # Load models
     profile = int(args.profile)
     kwargs = {}
-    texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2', mv_model=args.mv_model,
+    texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2',
+                                                              mv_model=args.mv_model,
                                                               use_delight=args.use_delight)
     print('3D Paint pipeline loaded')
 
@@ -93,8 +94,8 @@ def run(args):
 
     t4 = time.time()
     # Preprocess the image
-    rmbg_remover = RMBGRemover()
     if args.mv_model == 'hunyuan3d-paint-v2-0':
+        rmbg_remover = RMBGRemover()
         image = rmbg_remover(image)
 
     t5 = time.time()

@@ -4,12 +4,10 @@ from PIL import Image
 from diffusers import AutoencoderKL
 from typing import List, Union
 
-from hy3dgen.rmbg import RMBGRemover
 from .models.attention_processor import DecoupledMVRowColSelfAttnProcessor2_0
 from .pipelines.pipeline_mvadapter_i2mv_sdxl import MVAdapterI2MVSDXLPipeline
 from .schedulers.scheduling_shift_snr import ShiftSNRScheduler
 from .utils import get_orthogonal_camera, tensor_to_image
-from .utils.warnings_filter import filter_stdout
 
 
 class MVAdapterPipelineWrapper:
@@ -44,49 +42,6 @@ class MVAdapterPipelineWrapper:
     def __init__(self, pipeline: MVAdapterI2MVSDXLPipeline, device: str):
         self.pipeline = pipeline
         self.device = device
-
-    def preprocess_reference_image(self, image: Image.Image, height: int, width: int) -> Image.Image:
-        """
-        Preprocess RGBA image to remove background and center it (matches standalone preprocess_image).
-        """
-        if image.mode != "RGBA":
-            # If it doesn't have an alpha channel, convert it to RGBA and create a grey background.
-            bg_handler = RMBGRemover()
-            return bg_handler(image, height=height, width=width, background_color=[0.5, 0.5, 0.5])
-
-        image_np = np.array(image)
-        alpha = image_np[..., 3] > 0
-        H, W = alpha.shape
-
-        # Get the bounding box of alpha
-        y, x = np.where(alpha)
-        y0, y1 = max(y.min() - 1, 0), min(y.max() + 1, H)
-        x0, x1 = max(x.min() - 1, 0), min(x.max() + 1, W)
-        image_center = image_np[y0:y1, x0:x1]
-
-        # Resize the longer side to H * 0.9
-        H, W = image_center.shape[:2]
-        if H > W:
-            W = int(W * (height * 0.9) / H)
-            H = int(height * 0.9)
-        else:
-            H = int(H * (width * 0.9) / W)
-            W = int(width * 0.9)
-
-        image_center = np.array(Image.fromarray(image_center).resize((W, H)))
-
-        # Pad to H, W
-        start_h = (height - H) // 2
-        start_w = (width - W) // 2
-        image_out = np.zeros((height, width, 4), dtype=np.uint8)
-        image_out[start_h:start_h + H, start_w:start_w + W] = image_center
-
-        # Apply alpha blending with gray background
-        image_out = image_out.astype(np.float32) / 255.0
-        image_out = image_out[:, :, :3] * image_out[:, :, 3:4] + (1 - image_out[:, :, 3:4]) * 0.5
-        image_out = (image_out * 255).clip(0, 255).astype(np.uint8)
-
-        return Image.fromarray(image_out)
 
     def generate_control_images_from_mesh(self, mesh, num_views, height=768, width=768):
         """
@@ -217,8 +172,6 @@ class MVAdapterPipelineWrapper:
         else:
             reference_image = image_prompt
 
-        reference_image = self.preprocess_reference_image(reference_image, height, width)
-
         if save_debug_images:
             import os
             debug_dir = "debug_control_images"
@@ -270,22 +223,21 @@ class MVAdapterPipelineWrapper:
         generator = torch.Generator(device=self.device).manual_seed(seed) if seed != -1 else None
 
         # Run the pipeline
-        with filter_stdout():
-            output = self.pipeline(
-                prompt,
-                height=height,
-                width=width,
-                num_inference_steps=num_inference_steps,
-                guidance_scale=guidance_scale,
-                num_images_per_prompt=num_views,
-                control_image=control_images,
-                control_conditioning_scale=control_conditioning_scale,
-                reference_image=reference_image,
-                reference_conditioning_scale=reference_conditioning_scale,
-                negative_prompt=negative_prompt,
-                generator=generator,
-                cross_attention_kwargs={"scale": lora_scale},
-            )
+        output = self.pipeline(
+            prompt,
+            height=height,
+            width=width,
+            num_inference_steps=num_inference_steps,
+            guidance_scale=guidance_scale,
+            num_images_per_prompt=num_views,
+            control_image=control_images,
+            control_conditioning_scale=control_conditioning_scale,
+            reference_image=reference_image,
+            reference_conditioning_scale=reference_conditioning_scale,
+            negative_prompt=negative_prompt,
+            generator=generator,
+            cross_attention_kwargs={"scale": lora_scale},
+        )
 
         images = output.images
 
