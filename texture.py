@@ -65,8 +65,7 @@ def run(args):
     print('3D Paint pipeline loaded')
 
     pipe = offload.extract_models("texgen_worker", texture_pipeline)
-    if args.mv_model == 'hunyuan3d-paint-v2-0':
-        texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
+    texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
 
     t2i_pipeline = None
     if args.prompt is not None:

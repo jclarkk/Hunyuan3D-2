@@ -39,13 +39,6 @@ class MVAdapterPipelineWrapper:
         pipe.load_custom_adapter('huanngzh/mv-adapter', weight_name="mvadapter_ig2mv_sdxl.safetensors")
         pipe.cond_encoder.to(device=device, dtype=torch.float16)
         pipe.to(device=device, dtype=torch.float16)
-
-        try:
-            import xformers
-            pipe.unet.enable_xformers_memory_efficient_attention()
-        except ImportError:
-            print('Warning: XFormers not available, using default attention processor')
-
         return cls(pipe, device=device)
 
     def __init__(self, pipeline: MVAdapterI2MVSDXLPipeline, device: str):
