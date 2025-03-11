@@ -238,15 +238,21 @@ class Hunyuan3DPaintPipeline:
 
         image_out = image_array.astype(np.float32) / 255.0
 
+        # Store the alpha channel from the recentered image
+        recentered_alpha = image_out[:, :, 3:4]
+
         if self.config.mv_model == 'mv-adapter':
             # Apply alpha blending with gray background (0.5 = 50% gray)
             rgb = image_out[:, :, :3]
-            alpha = image_out[:, :, 3:4]
+            alpha = recentered_alpha
             image_out = rgb * alpha + (1 - alpha) * 0.5
             image_out = (image_out * 255).clip(0, 255).astype(np.uint8)
+        else:
+            # If no blending, just convert back to uint8
+            image_out = (image_out[:, :, :3] * 255).clip(0, 255).astype(np.uint8)
 
-        # Convert back to RGBA Image
-        return Image.fromarray(np.dstack((image_out, alpha_channel)), 'RGBA')
+        # Convert back to RGBA Image using the recentered alpha
+        return Image.fromarray(np.dstack((image_out, (recentered_alpha * 255).astype(np.uint8))), 'RGBA')
 
     @torch.no_grad()
     def __call__(self,
