@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from PIL import Image
 from diffusers import AutoencoderKL
+from rembg import remove
 from typing import List, Union
 
 from .models.attention_processor import DecoupledMVRowColSelfAttnProcessor2_0
@@ -43,28 +44,28 @@ class MVAdapterPipelineWrapper:
         self.pipeline = pipeline
         self.device = device
 
-    def preprocess_reference_image(self, image: Image.Image, height: int, width: int) -> Image.Image:
+    def preprocess_reference_image(image: Image.Image, height: int, width: int) -> Image.Image:
         """
         Preprocess image to center it and resize with a grey background visible through transparency,
-        ensuring all images behave like RGBA with alpha blending.
+        using rembg for background removal.
         """
+        # Convert image to numpy array
         image_np = np.array(image)
         has_alpha = image_np.shape[-1] == 4
 
+        # Handle cropping for RGBA with alpha, or use full image for RGB
         if has_alpha:
             alpha = image_np[..., 3] > 0
             H, W = alpha.shape
-            # Get the bounding box of alpha
             y, x = np.where(alpha)
             y0, y1 = max(y.min() - 1, 0), min(y.max() + 1, H)
             x0, x1 = max(x.min() - 1, 0), min(x.max() + 1, W)
             image_center = image_np[y0:y1, x0:x1]
         else:
-            # For RGB, use the full image without cropping
             image_center = image_np
             H, W = image_center.shape[:2]
 
-        # Resize the longer side to H * 0.9
+        # Resize the longer side to 90% of target dimensions
         if H > W:
             W = int(W * (height * 0.9) / H)
             H = int(height * 0.9)
@@ -72,12 +73,12 @@ class MVAdapterPipelineWrapper:
             H = int(H * (width * 0.9) / W)
             W = int(width * 0.9)
 
-        image_center = np.array(Image.fromarray(image_center).resize((W, H)))
+        # Resize the image
+        image_center = np.array(Image.fromarray(image_center).resize((W, H), Image.LANCZOS))
 
-        # Ensure image_center is RGBA
-        if not has_alpha:
-            # Add full opacity alpha channel to RGB images
-            image_center = np.concatenate([image_center, np.full((H, W, 1), 255, dtype=np.uint8)], axis=-1)
+        # Use rembg to remove background
+        image_with_alpha = np.array(remove(Image.fromarray(image_center)))
+        image_center = image_with_alpha  # rembg returns an RGBA image
 
         # Create output array with grey background (128 = 0.5 in float)
         image_out = np.full((height, width, 4), [128, 128, 128, 255], dtype=np.uint8)
