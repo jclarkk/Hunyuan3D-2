@@ -44,7 +44,7 @@ class MVAdapterPipelineWrapper:
         self.pipeline = pipeline
         self.device = device
 
-    def preprocess_reference_image(image: Image.Image, height: int, width: int) -> Image.Image:
+    def preprocess_reference_image(self, image: Image.Image, height: int, width: int) -> Image.Image:
         """
         Preprocess image to center it and resize with a grey background visible through transparency,
         using rembg for background removal.
