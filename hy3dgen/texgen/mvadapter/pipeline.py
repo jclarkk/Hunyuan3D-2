@@ -45,7 +45,8 @@ class MVAdapterPipelineWrapper:
 
     def preprocess_reference_image(self, image: Image.Image, height: int, width: int) -> Image.Image:
         """
-        Preprocess image to center it and resize, handling both RGB and RGBA formats.
+        Preprocess image to center it and resize with a grey background visible through transparency,
+        ensuring all images behave like RGBA with alpha blending.
         """
         image_np = np.array(image)
         has_alpha = image_np.shape[-1] == 4
@@ -73,21 +74,30 @@ class MVAdapterPipelineWrapper:
 
         image_center = np.array(Image.fromarray(image_center).resize((W, H)))
 
-        # Pad to H, W
+        # Ensure image_center is RGBA
+        if not has_alpha:
+            # Add full opacity alpha channel to RGB images
+            image_center = np.concatenate([image_center, np.full((H, W, 1), 255, dtype=np.uint8)], axis=-1)
+
+        # Create output array with grey background (128 = 0.5 in float)
+        image_out = np.full((height, width, 4), [128, 128, 128, 255], dtype=np.uint8)
+
+        # Place the centered image
         start_h = (height - H) // 2
         start_w = (width - W) // 2
-        if has_alpha:
-            image_out = np.zeros((height, width, 4), dtype=np.uint8)
-            image_out[start_h:start_h + H, start_w:start_w + W] = image_center
-            # Apply alpha blending with gray background
-            image_out = image_out.astype(np.float32) / 255.0
-            image_out = image_out[:, :, :3] * image_out[:, :, 3:4] + (1 - image_out[:, :, 3:4]) * 0.5
-        else:
-            image_out = np.zeros((height, width, 3), dtype=np.uint8)
-            image_out[start_h:start_h + H, start_w:start_w + W] = image_center
-            image_out = image_out.astype(np.float32) / 255.0  # No alpha blending for RGB
+        image_out[start_h:start_h + H, start_w:start_w + W] = image_center
 
+        # Convert to float for blending
+        image_out = image_out.astype(np.float32) / 255.0
+
+        # Apply alpha blending with grey background
+        foreground = image_out[:, :, :3] * image_out[:, :, 3:4]
+        background = (1 - image_out[:, :, 3:4]) * 0.5
+        image_out = foreground + background
+
+        # Convert back to uint8
         image_out = (image_out * 255).clip(0, 255).astype(np.uint8)
+
         return Image.fromarray(image_out)
 
     def generate_control_images_from_mesh(self, mesh, num_views, height=768, width=768):
@@ -219,8 +229,7 @@ class MVAdapterPipelineWrapper:
         else:
             reference_image = image_prompt
 
-        if reference_image.mode == "RGBA":
-            reference_image = self.preprocess_reference_image(reference_image, height, width)
+        reference_image = self.preprocess_reference_image(reference_image, height, width)
 
         if save_debug_images:
             import os
