@@ -393,7 +393,7 @@ class Hunyuan3DPaintPipeline:
             albedo_multiviews, metallic_multiviews, normal_multiviews, roughness_multiviews = (
                 self.generate_pbr_for_batch(pbr_pipeline, pre_pbr_multiviews))
 
-            if self.config.enhance_texture_angles:
+            if enhance_texture_angles:
                 pre_pbr_multiviews = [view.resize((1024, 1024)) for view in multiviews[6:]]
                 albedo_multiviews_enhanced, metallic_multiviews_enhanced, normal_multiviews_enhanced, roughness_multiviews_enhanced = (
                     self.generate_pbr_for_batch(pbr_pipeline, pre_pbr_multiviews))
