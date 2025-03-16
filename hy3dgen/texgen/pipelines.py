@@ -34,6 +34,7 @@ from PIL import Image
 from .differentiable_renderer.mesh_render import MeshRender
 from .mvadapter.pipeline import MVAdapterPipelineWrapper
 from .upscalers.pipelines import AuraSRUpscalerPipeline, InvSRUpscalerPipeline, FluxUpscalerPipeline
+from .utils.camera_utils import dynamic_camera_angles
 from .utils.dehighlight_utils import Light_Shadow_Remover
 from .utils.imagesuper_utils import Image_Super_Net
 from .utils.multiview_utils import Multiview_Diffusion_Net
@@ -55,13 +56,6 @@ class Hunyuan3DTexGenConfig:
         self.candidate_camera_azims = [0, 90, 180, 270, 0, 180]
         self.candidate_camera_elevs = [0, 0, 0, 0, 90, -90]
         self.candidate_view_weights = [1, 0.1, 0.5, 0.1, 0.1, 0.1]
-
-        self.candidate_camera_azims_enhanced = [0, 90, 180, 270, 0, 180, 90, 270, 45, 135, 225, 310, 45, 135, 225, 310,
-                                                0, 180]
-        self.candidate_camera_elevs_enhanced = [0, 0, 0, 0, 90, -90, -45, -45, 15, 15, 15, 15, -15, -15, -15, -15, 15,
-                                                15]
-        self.candidate_view_weights_enhanced = [1, 0.1, 0.5, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1,
-                                                0.1, 0.1, 0.1]
 
         self.render_size = 2048
         self.texture_size = 1024
@@ -259,6 +253,10 @@ class Hunyuan3DPaintPipeline:
                 width = 768
 
             image_prompt = self.models['delight_model'](image_prompt, height, width)
+
+            if debug:
+                image_prompt.save('debug_delight.png')
+
             t1 = time.time()
             print(f"Light and shadow removal took {t1 - t0:.2f} seconds")
 
@@ -277,10 +275,10 @@ class Hunyuan3DPaintPipeline:
 
         self.render.load_mesh(mesh)
 
+        camera_info = []
         if enhance_texture_angles:
-            selected_camera_elevs, selected_camera_azims, selected_view_weights = \
-                (self.config.candidate_camera_elevs_enhanced, self.config.candidate_camera_azims_enhanced,
-                 self.config.candidate_view_weights_enhanced)
+            selected_camera_elevs, selected_camera_azims, selected_view_weights, camera_info = \
+                dynamic_camera_angles(num_views=12, enhanced=True)
         else:
             selected_camera_elevs, selected_camera_azims, selected_view_weights = \
                 (self.config.candidate_camera_elevs, self.config.candidate_camera_azims,
@@ -299,17 +297,7 @@ class Hunyuan3DPaintPipeline:
                 normal_maps[i].save(f'debug_normal_map_{i}.png')
                 position_maps[i].save(f'debug_position_map_{i}.png')
 
-        if enhance_texture_angles:
-            camera_info = [
-                (((azim // 30) + 9) % 12) // {
-                    -90: 3, -45: 3, -20: 1, -15: 1, 0: 1, 15: 1, 20: 1, 90: 3
-                }[elev] + {
-                    -90: 36, -45: 36, -20: 0, -15: 0, 0: 12, 15: 24, 20: 24, 90: 40
-                }[elev]
-                for azim, elev in
-                zip(self.config.candidate_camera_azims_enhanced, self.config.candidate_camera_elevs_enhanced)
-            ]
-        else:
+        if not enhance_texture_angles:
             camera_info = [(((azim // 30) + 9) % 12) // {-20: 1, 0: 1, 20: 1, -90: 3, 90: 3}[
                 elev] + {-20: 0, 0: 12, 20: 24, -90: 36, 90: 40}[elev] for azim, elev in
                            zip(selected_camera_azims, selected_camera_elevs)]
@@ -325,6 +313,11 @@ class Hunyuan3DPaintPipeline:
             raise ValueError(f"Invalid MV model {self.config.mv_model}")
         t1 = time.time()
         print(f"Generating multiviews took {t1 - t0:.2f} seconds")
+
+        if debug:
+            for i in range(len(multiviews)):
+                image = multiviews[i]
+                image.save(f'debug_multiview_{i}.png')
 
         if upscale_model == 'Aura':
             upscaler = AuraSRUpscalerPipeline.from_pretrained()
@@ -346,8 +339,6 @@ class Hunyuan3DPaintPipeline:
             from tqdm import tqdm
             for i in tqdm(range(len(multiviews)), desc="Upscaling multiviews"):
                 rgb_img = multiviews[i].convert("RGB")
-                if debug:
-                    rgb_img.save(f'debug_multiview_{i}.png')
 
                 if i < 6:
                     rgb_img = upscaler(rgb_img)
