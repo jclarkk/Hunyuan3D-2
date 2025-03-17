@@ -43,28 +43,33 @@ def mesh_uv_wrap(mesh):
     return mesh
 
 def open3d_mesh_uv_wrap(mesh, resolution=1024):
-    import open3d as o3d
-    if isinstance(mesh, trimesh.Scene):
-        mesh = mesh.dump(concatenate=True)
+    try:
+        import open3d as o3d
+        if isinstance(mesh, trimesh.Scene):
+            mesh = mesh.dump(concatenate=True)
 
-    o3d_mesh = o3d.t.geometry.TriangleMesh()
-    o3d_mesh.vertex.positions = o3d.core.Tensor(mesh.vertices)
-    o3d_mesh.triangle.indices = o3d.core.Tensor(mesh.faces)
+        o3d_mesh = o3d.t.geometry.TriangleMesh()
+        o3d_mesh.vertex.positions = o3d.core.Tensor(mesh.vertices)
+        o3d_mesh.triangle.indices = o3d.core.Tensor(mesh.faces)
 
-    o3d_mesh.compute_uvatlas(size=resolution)
+        o3d_mesh.compute_uvatlas(size=resolution)
 
-    new_v = mesh.vertices[mesh.faces.reshape(-1)]
-    new_f = np.arange(len(new_v)).reshape(-1, 3)
-    new_uv = o3d_mesh.triangle.texture_uvs.numpy().reshape(-1, 2)
+        new_v = mesh.vertices[mesh.faces.reshape(-1)]
+        new_f = np.arange(len(new_v)).reshape(-1, 3)
+        new_uv = o3d_mesh.triangle.texture_uvs.numpy().reshape(-1, 2)
 
-    mesh = trimesh.Trimesh(
-        vertices=new_v,
-        faces=new_f,
-        process=False
-    )
-    mesh.visual = trimesh.visual.TextureVisuals(
-        uv=new_uv.astype(np.float32),
-    )
+        mesh = trimesh.Trimesh(
+            vertices=new_v,
+            faces=new_f,
+            process=False
+        )
+        mesh.visual = trimesh.visual.TextureVisuals(
+            uv=new_uv.astype(np.float32),
+        )
+    except Exception as e:
+        # Open3D might fail on mesh conditions so we will fallback to xatlas
+        print('Open3D failed to unwrap mesh, falling back to xatlas. Error: ', e)
+        return mesh_uv_wrap(mesh)
 
     return mesh
 
