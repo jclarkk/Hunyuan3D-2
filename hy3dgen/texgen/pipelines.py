@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 class Hunyuan3DTexGenConfig:
 
     def __init__(self, light_remover_ckpt_path, multiview_ckpt_path, mv_model='hunyuan3d-paint-v2-0',
-                 use_delight=False):
-        self.device = 'cpu'
+                 use_delight=False, device='cuda'):
+        self.device = device
         self.mv_model = mv_model
         self.light_remover_ckpt_path = light_remover_ckpt_path
         self.multiview_ckpt_path = multiview_ckpt_path
@@ -109,8 +109,12 @@ class Hunyuan3DPaintPipeline:
         if self.config.mv_model == 'hunyuan3d-paint-v2-0':
             self.models['multiview_model'] = Multiview_Diffusion_Net(self.config)
         elif self.config.mv_model == 'mv-adapter':
-            self.models['multiview_model'] = MVAdapterPipelineWrapper.from_pretrained()
+            self.models['multiview_model'] = MVAdapterPipelineWrapper.from_pretrained(device=self.config.device)
         print('Multiview model loaded')
+
+    def enable_model_cpu_offload(self, gpu_id: Optional[int] = None, device: Union[torch.device, str] = "cuda"):
+        self.models['delight_model'].pipeline.enable_model_cpu_offload(gpu_id=gpu_id, device=device)
+        self.models['multiview_model'].pipeline.enable_model_cpu_offload(gpu_id=gpu_id, device=device)
 
     def render_normal_multiview(self, camera_elevs, camera_azims, use_abs_coor=True):
         normal_maps = []

@@ -33,7 +33,7 @@ class Light_Shadow_Remover():
         pipeline.scheduler = EulerAncestralDiscreteScheduler.from_config(pipeline.scheduler.config)
         pipeline.set_progress_bar_config(disable=True)
 
-        self.pipeline = pipeline
+        self.pipeline = pipeline.to(self.device, torch.float16)
 
     def recorrect_rgb(self, src_image, target_image, alpha_channel, scale=0.95):
 
@@ -51,8 +51,7 @@ class Light_Shadow_Remover():
         for i in range(3):
             src_mean, src_stddev = torch.mean(src_flat[:, i]), torch.std(src_flat[:, i])
             target_mean, target_stddev = torch.mean(target_flat[:, i]), torch.std(target_flat[:, i])
-            corrected_bgr[:, :, i] = torch.clamp(
-                (src_image[:, :, i] - scale * src_mean) * (target_stddev / src_stddev) + scale * target_mean, 0, 1)
+            corrected_bgr[:, :, i] = torch.clamp((src_image[:, :, i] - scale * src_mean) * (target_stddev / src_stddev) + scale * target_mean, 0, 1)
 
         src_mse = torch.mean((src_image - target_image) ** 2)
         modify_mse = torch.mean((corrected_bgr - target_image) ** 2)
@@ -77,9 +76,14 @@ class Light_Shadow_Remover():
             image_array[alpha_channel == 0, :3] = 255
             image_array[:, :, 3] = alpha_channel
             image = Image.fromarray(image_array)
-            alpha = torch.tensor(alpha_channel / 255.0).unsqueeze(-1).to(self.device)
+
+            image_tensor = torch.tensor(np.array(image) / 255.0).to(self.device)
+            alpha = image_tensor[:, :, 3:]
+            rgb_target = image_tensor[:, :, :3]
         else:
-            alpha = torch.ones((height, width, 1), device=self.device)
+            image_tensor = torch.tensor(np.array(image) / 255.0).to(self.device)
+            alpha = torch.ones_like(image_tensor)[:, :, :1]
+            rgb_target = image_tensor[:, :, :3]
 
         image = image.convert('RGB')
 
@@ -94,11 +98,10 @@ class Light_Shadow_Remover():
             guidance_scale=self.cfg_text,
         ).images[0]
 
-        image_tensor = torch.tensor(np.array(image) / 255.0).to(self.device)
-        rgb_src = image_tensor[:, :, :3]
-        rgb_target = torch.tensor(np.array(image.convert('RGB')) / 255.0).to(self.device)[:, :, :3]
+        image_tensor = torch.tensor(np.array(image)/255.0).to(self.device)
+        rgb_src = image_tensor[:,:,:3]
         image = self.recorrect_rgb(rgb_src, rgb_target, alpha)
-        image = image[:, :, :3] * image[:, :, 3:] + torch.ones_like(image[:, :, :3]) * (1.0 - image[:, :, 3:])
-        image = Image.fromarray((image.cpu().numpy() * 255).astype(np.uint8))
+        image = image[:,:,:3]*image[:,:,3:] + torch.ones_like(image[:,:,:3])*(1.0-image[:,:,3:])
+        image = Image.fromarray((image.cpu().numpy()*255).astype(np.uint8))
 
         return image

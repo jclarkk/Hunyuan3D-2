@@ -58,27 +58,19 @@ def run(args):
 
     t2 = time.time()
     # Load models
-    profile = int(args.profile)
-    kwargs = {}
     texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2',
                                                               mv_model=args.mv_model,
                                                               use_delight=args.use_delight)
+    if args.low_vram_mode:
+        texture_pipeline.enable_model_cpu_offload()
     print('3D Paint pipeline loaded')
 
-    pipe = offload.extract_models("texgen_worker", texture_pipeline)
     texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
 
     t2i_pipeline = None
     if args.prompt is not None:
         t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled')
-        pipe.update(offload.extract_models("t2i_worker", t2i_pipeline))
 
-    if profile < 5:
-        kwargs["pinnedMemory"] = "texgen_worker/model"
-    if profile != 1 and profile != 3:
-        kwargs["budgets"] = {"*": 2200}
-
-    offload.profile(pipe, profile_no=profile, verboseLevel=int(args.verbose), **kwargs)
     t3 = time.time()
     print(f"Model loading took {t3 - t2:.2f} seconds")
 
@@ -148,8 +140,7 @@ if __name__ == "__main__":
     parser.add_argument('--enhance_texture_angles', action='store_true', help='Enhance texture angles', default=False)
     parser.add_argument('--pbr', action='store_true', help='Generate PBR textures', default=False)
     parser.add_argument('--debug', action='store_true', help='Debug mode', default=False)
-    parser.add_argument('--profile', type=str, default="3")
-    parser.add_argument('--verbose', type=str, default="1")
+    parser.add_argument('--low_vram_mode', action='store_true')
 
     args = parser.parse_args()
 

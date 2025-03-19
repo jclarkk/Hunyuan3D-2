@@ -31,10 +31,6 @@ from hy3dgen.shapegen.utils import logger
 
 MAX_SEED = 1e7
 
-from mmgp import offload
-
-from hy3dgen.rmbg import RMBGRemover
-
 
 def get_example_img_list():
     print('Loading example img list ...')
@@ -150,8 +146,7 @@ def _gen_shape(
     check_box_rembg=False,
     num_chunks=200000,
     randomize_seed: bool = False,
-    remesh_method='None',
-    face_count=60000
+    remesh_method='None'
 ):
     if not MV_MODE and image is None and caption is None:
         raise gr.Error("Please provide either a caption or an image.")
@@ -186,17 +181,17 @@ def _gen_shape(
             'octree_resolution': octree_resolution,
             'check_box_rembg': check_box_rembg,
             'num_chunks': num_chunks,
+            'remesh_method': remesh_method
         }
     }
     time_meta = {}
-    start_time_0 = time.time()
 
     if image is None:
         start_time = time.time()
         try:
             image = t2i_worker(caption)
         except Exception as e:
-            raise gr.Error(f"Text to 3D is disabled. Please enable it by restarted the app with `python gradio_app.py --enable_t23d`.")
+            raise gr.Error(f"Text to 3D is disable. Please enable it by `python gradio_app.py --enable_t23d`.")
         time_meta['text2image'] = time.time() - start_time
 
     # remove disk io to make responding faster, uncomment at your will.
@@ -222,7 +217,7 @@ def _gen_shape(
 
     generator = torch.Generator()
     generator = generator.manual_seed(int(seed))
-    mesh = i23d_worker(
+    outputs = i23d_worker(
         image=image,
         num_inference_steps=steps,
         guidance_scale=guidance_scale,
@@ -234,6 +229,10 @@ def _gen_shape(
     time_meta['shape generation'] = time.time() - start_time
     logger.info("---Shape generation takes %s seconds ---" % (time.time() - start_time))
 
+    tmp_start = time.time()
+    mesh = export_to_trimesh(outputs)[0]
+    time_meta['export to trimesh'] = time.time() - tmp_start
+
     if remesh_method == 'InstantMeshes':
         remesh_method = 'im'
     elif remesh_method == 'BPT':
@@ -241,7 +240,7 @@ def _gen_shape(
 
     mesh = FloaterRemover()(mesh)
     mesh = DegenerateFaceRemover()(mesh)
-    mesh = FaceReducer()(mesh, max_facenum=face_count, remesh_method=remesh_method)
+    mesh = FaceReducer()(mesh, remesh_method=remesh_method)
 
     stats['number_of_faces'] = mesh.faces.shape[0]
     stats['number_of_vertices'] = mesh.vertices.shape[0]
@@ -265,13 +264,12 @@ def generation_all(
     check_box_rembg=False,
     num_chunks=200000,
     randomize_seed: bool = False,
-        remesh_method='None',
-        uv_unwrap_method='xatlas',
-        face_count=60000,
-        upscale_model='Aura',
-        enhance_texture_angles=False,
-        pbr=False,
-        texture_size=1024
+    remesh_method='None',
+    uv_unwrap_method='xatlas',
+    upscale_model='Aura',
+    enhance_texture_angles=False,
+    pbr=False,
+    texture_size=1024
 ):
     original_image = image.copy()
 
@@ -290,17 +288,16 @@ def generation_all(
         check_box_rembg=check_box_rembg,
         num_chunks=num_chunks,
         randomize_seed=randomize_seed,
-        remesh_method=remesh_method,
-        face_count=face_count
+        remesh_method=remesh_method
     )
     path = export_mesh(mesh, save_folder, textured=False)
 
-    # tmp_time = time.time()
-    # mesh = floater_remove_worker(mesh)
-    # mesh = degenerate_face_remove_worker(mesh)
-    # logger.info("---Postprocessing takes %s seconds ---" % (time.time() - tmp_time))
-    # stats['time']['postprocessing'] = time.time() - tmp_time
+    tmp_time = time.time()
+    mesh = face_reduce_worker(mesh)
+    logger.info("---Face Reduction takes %s seconds ---" % (time.time() - tmp_time))
+    stats['time']['face reduction'] = time.time() - tmp_time
 
+    tmp_time = time.time()
     textured_mesh = texgen_worker(
         mesh,
         original_image,
@@ -310,6 +307,11 @@ def generation_all(
         texture_size=texture_size,
         unwrap_method=uv_unwrap_method
     )
+    logger.info("---Texture Generation takes %s seconds ---" % (time.time() - tmp_time))
+    stats['time']['texture generation'] = time.time() - tmp_time
+    stats['time']['total'] = time.time() - start_time_0
+
+    textured_mesh.metadata['extras'] = stats
     path_textured = export_mesh(textured_mesh, save_folder, textured=True)
     model_viewer_html_textured = build_model_viewer_html(save_folder, height=HTML_HEIGHT, width=HTML_WIDTH,
                                                          textured=True)
@@ -338,8 +340,7 @@ def shape_generation(
     check_box_rembg=False,
     num_chunks=200000,
     randomize_seed: bool = False,
-    remesh_method='None',
-    face_count=60000
+    remesh_method='None'
 ):
     start_time_0 = time.time()
     mesh, image, save_folder, stats, seed = _gen_shape(
@@ -356,14 +357,15 @@ def shape_generation(
         check_box_rembg=check_box_rembg,
         num_chunks=num_chunks,
         randomize_seed=randomize_seed,
-        remesh_method=remesh_method,
-        face_count=face_count
+        remesh_method=remesh_method
     )
     stats['time']['total'] = time.time() - start_time_0
     mesh.metadata['extras'] = stats
 
     path = export_mesh(mesh, save_folder, textured=False)
     model_viewer_html = build_model_viewer_html(save_folder, height=HTML_HEIGHT, width=HTML_WIDTH)
+    if args.low_vram_mode:
+        torch.cuda.empty_cache()
     return (
         gr.update(value=path),
         model_viewer_html,
@@ -396,36 +398,6 @@ def build_app():
       <a href="#">Technical Report</a> &ensp;
       <a href="https://huggingface.co/Tencent/Hunyuan3D-2"> Pretrained Models</a> &ensp;
     </div>
-    <div style="text-align: center; margin-top: 10px; font-size: 1.2em;">
-    <!-- Enhanced Edition Section -->
-    <div class="bg-gray-50 rounded-lg p-8 mb-12">
-        <h2 class="text-2xl font-bold text-center mb-6 text-gray-800">Enhanced Edition Features</h2>
-        
-        <div class="space-y-6">
-            <div class="space-y-2">
-                <h3 class="font-semibold text-lg text-gray-700">Mesh Improvements</h3>
-                <p class="text-gray-600">• Quad Remeshing using InstantMeshes or BPT</p>
-                <p class="text-gray-600">• Added face count and texture resolution options</p>
-            </div>
-            
-            <div class="space-y-2">
-                <h3 class="font-semibold text-lg text-gray-700">Multi view model</h3>
-                <p class="text-gray-600">Hunyuan Paint / MV-Adapter</p>
-                <p class="text-gray-500 text-sm">How-to: <code class="bg-gray-100 px-2 py-1 rounded">python gradio_app.py --mv_model "mv-adapter"</code></p>
-            </div>
-
-            <div class="space-y-2">
-                <h3 class="font-semibold text-lg text-gray-700">Super Resolution</h3>
-                <p class="text-gray-600">AuraSR-V2 / InvSR (SD-Turbo) / Flux Controlnet / SD-Upscaler</p>
-                <p class="text-gray-500 text-sm">Installation: <code class="bg-gray-100 px-2 py-1 rounded">hy3dgen/texgen/upscalers/README.md</code></p>
-            </div>
-
-            <div class="space-y-2">
-                <h3 class="font-semibold text-lg text-gray-700">PBR Implementation</h3>
-                <p class="text-gray-600">Based on <a href="https://github.com/zheng95z/rgbx" class="text-blue-600 hover:text-blue-800">rgbx</a></p>
-            </div>
-        </div>
-    </div>
     """
     custom_css = """
     .app.svelte-wpkpf6.svelte-wpkpf6:not(.fill_width) {
@@ -438,7 +410,6 @@ def build_app():
     .mv-image .icon-wrap {
         width: 20px;
     }
-    
 
     """
 
@@ -517,8 +488,8 @@ def build_app():
                             pbr = gr.Checkbox(label='PBR Texture (Experimental, use the README in folder)', value=False)
 
                         remesh_method = gr.Radio(['InstantMeshes', 'BPT', 'None'], label='Remesh Method', value='None')
-                        uv_unwrap_method = gr.Radio(['xatlas', 'open3d', 'bpy'], label='UV Unwrap Method', value='xatlas')
-                        face_count = gr.Slider(minimum=1000, maximum=100000, step=1000, value=50000, label='Face Count')
+                        uv_unwrap_method = gr.Radio(['xatlas', 'open3d', 'bpy'], label='UV Unwrap Method',
+                                                    value='xatlas')
                         super_resolution = gr.Radio(['None', 'Aura', 'InvSR', 'Flux', 'SD-Upscaler'],
                                                     label='Super-Resolution (Install the method required, use README in folder)',
                                                     value='None')
@@ -603,8 +574,7 @@ def build_app():
                 check_box_rembg,
                 num_chunks,
                 randomize_seed,
-                remesh_method,
-                face_count
+                remesh_method
             ],
             outputs=[file_out, html_gen_mesh, stats, seed]
         ).then(
@@ -634,7 +604,6 @@ def build_app():
                 randomize_seed,
                 remesh_method,
                 uv_unwrap_method,
-                face_count,
                 super_resolution,
                 enhance_texture,
                 pbr,
@@ -731,10 +700,9 @@ if __name__ == '__main__':
     parser.add_argument('--disable_tex', action='store_true')
     parser.add_argument('--enable_flashvdm', action='store_true')
     parser.add_argument('--compile', action='store_true')
+    parser.add_argument('--low_vram_mode', action='store_true')
     parser.add_argument('--use_delight', action='store_true', help='Use Delight model', default=False)
     parser.add_argument('--mv_model', type=str, default='hunyuan3d-paint-v2-0', help='Multiview model to use')
-    parser.add_argument('--profile', type=str, default="3")
-    parser.add_argument('--verbose', type=str, default="1")
     args = parser.parse_args()
 
     SAVE_DIR = args.cache_path
@@ -763,7 +731,6 @@ if __name__ == '__main__':
     example_is = get_example_img_list()
     example_ts = get_example_txt_list()
     example_mvs = get_example_mv_list()
-    torch.set_default_device("cpu")
 
     SUPPORTED_FORMATS = ['glb', 'obj', 'ply', 'stl']
 
@@ -772,17 +739,23 @@ if __name__ == '__main__':
         try:
             from hy3dgen.texgen import Hunyuan3DPaintPipeline
 
-            texgen_worker = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2', mv_model=args.mv_model,
-                                                                   use_delight=args.use_delight)
-
+            texgen_worker = Hunyuan3DPaintPipeline.from_pretrained(args.texgen_model_path)
+            if args.low_vram_mode:
+                texgen_worker.enable_model_cpu_offload()
+            # Not help much, ignore for now.
+            # if args.compile:
+            #     texgen_worker.models['delight_model'].pipeline.unet.compile()
+            #     texgen_worker.models['delight_model'].pipeline.vae.compile()
+            #     texgen_worker.models['multiview_model'].pipeline.unet.compile()
+            #     texgen_worker.models['multiview_model'].pipeline.vae.compile()
             HAS_TEXTUREGEN = True
         except Exception as e:
             print(e)
             print("Failed to load texture generator.")
-            print('Please refer to the README.md and install the missing requirements to activate it.')
+            print('Please try to install requirements by following README.md')
             HAS_TEXTUREGEN = False
 
-    HAS_T2I = False
+    HAS_T2I = True
     if args.enable_t23d:
         from hy3dgen.text2image import HunyuanDiTPipeline
 
@@ -791,38 +764,25 @@ if __name__ == '__main__':
 
     from hy3dgen.shapegen import FaceReducer, FloaterRemover, DegenerateFaceRemover, MeshSimplifier, \
         Hunyuan3DDiTFlowMatchingPipeline
-
     from hy3dgen.shapegen.pipelines import export_to_trimesh
+    from hy3dgen.rembg import BackgroundRemover
 
-    rmbg_worker = RMBGRemover()
+    rmbg_worker = BackgroundRemover()
     i23d_worker = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
-        'tencent/Hunyuan3D-2',
-        device="cpu",
-        use_safetensors=True)
+        args.model_path,
+        subfolder=args.subfolder,
+        use_safetensors=True,
+        device=args.device,
+    )
     if args.enable_flashvdm:
         mc_algo = 'mc' if args.device in ['cpu', 'mps'] else args.mc_algo
         i23d_worker.enable_flashvdm(mc_algo=mc_algo)
     if args.compile:
         i23d_worker.compile()
+
     floater_remove_worker = FloaterRemover()
     degenerate_face_remove_worker = DegenerateFaceRemover()
     face_reduce_worker = FaceReducer()
-
-    profile = int(args.profile)
-    kwargs = {}
-    pipe = offload.extract_models("i23d_worker", i23d_worker)
-    if HAS_TEXTUREGEN:
-        pipe.update(offload.extract_models("texgen_worker", texgen_worker))
-        texgen_worker.models["multiview_model"].pipeline.vae.use_slicing = True
-    if HAS_T2I:
-        pipe.update(offload.extract_models("t2i_worker", t2i_worker))
-
-    if profile < 5:
-        kwargs["pinnedMemory"] = "i23d_worker/model"
-    if profile != 1 and profile != 3:
-        kwargs["budgets"] = {"*": 2200}
-
-    offload.profile(pipe, profile_no=profile, verboseLevel=int(args.verbose), **kwargs)
 
     # https://discuss.huggingface.co/t/how-to-serve-an-html-file/33921/2
     # create a FastAPI app
@@ -833,6 +793,8 @@ if __name__ == '__main__':
     app.mount("/static", StaticFiles(directory=static_dir, html=True), name="static")
     shutil.copytree('./assets/env_maps', os.path.join(static_dir, 'env_maps'), dirs_exist_ok=True)
 
+    if args.low_vram_mode:
+        torch.cuda.empty_cache()
     demo = build_app()
     app = gr.mount_gradio_app(app, demo, path="/")
     uvicorn.run(app, host=args.host, port=args.port, workers=1)

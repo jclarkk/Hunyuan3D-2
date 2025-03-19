@@ -10,7 +10,6 @@ import sys
 import time
 import torch
 from PIL import Image
-from mmgp import offload
 from uuid import uuid4
 
 from hy3dgen.rmbg import RMBGRemover
@@ -25,8 +24,8 @@ def run(args):
     if args.unwrap_method not in ['xatlas', 'open3d', 'bpy']:
         raise ValueError("Unwrap method must be either 'xatlas', 'open3d' or 'bpy'")
 
-    if args.remesh_method not in [None, 'im', 'bpt', 'None']:
-        raise ValueError("Re-mesh type must be either 'im' or 'bpt'")
+    if args.remesh_method not in [None, 'im', 'bpt', 'simplify', 'None']:
+        raise ValueError("Re-mesh type must be either 'im', 'bpt' or 'simplify'")
 
     # Only one image supported right now
     image_path = args.image_paths[0]
@@ -44,41 +43,31 @@ def run(args):
     t1 = time.time()
     print(f"Image processing took {t1 - t0:.2f} seconds")
 
+    mc_algo = 'mc' if args.device in ['cpu', 'mps'] else args.mc_algo
+
     if args.fast:
         mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
             'tencent/Hunyuan3D-2',
             use_safetensors=True,
-            subfolder='hunyuan3d-dit-v2-0-fast',
+            subfolder='hunyuan3d-dit-v2-0-turbo',
             variant='fp16'
         )
+        mesh_pipeline.enable_flashvdm(mc_algo=mc_algo)
     else:
         mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
             'tencent/Hunyuan3D-2',
             use_safetensors=True
         )
-    print('3D DiT pipeline loaded')
 
-    profile = int(args.profile)
-    kwargs = {}
-    pipe = offload.extract_models("mesh_worker", mesh_pipeline)
-
-    if args.texture:
-        texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2', mv_model=args.mv_model)
-        print('3D Paint pipeline loaded')
-
-        pipe.update(offload.extract_models("texgen_worker", texture_pipeline))
-        texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
-
-    if profile < 5:
-        kwargs["pinnedMemory"] = "i23d_worker/model"
-    if profile != 1 and profile != 3:
-        kwargs["budgets"] = {"*": 2200}
-
-    offload.profile(pipe, profile_no=profile, verboseLevel=int(args.verbose), **kwargs)
+    t2 = time.time()
+    print('3D DiT pipeline loaded. Took {:.2f} seconds'.format(t2 - t1))
 
     # Generate mesh
-    t2 = time.time()
-    mesh = mesh_pipeline(image=image, num_inference_steps=30, mc_algo='mc',
+    steps = 5 if args.fast else 30
+    mesh = mesh_pipeline(image=image,
+                         num_inference_steps=steps,
+                         mc_algo=mc_algo,
+                         octree_resolution=512,
                          generator=torch.manual_seed(args.seed))[0]
     mesh = FloaterRemover()(mesh)
     mesh = DegenerateFaceRemover()(mesh)
@@ -94,6 +83,11 @@ def run(args):
         # Reload image to use maximum possible resolution for texture model
         image = Image.open(image_path)
         t4 = time.time()
+        texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2', mv_model=args.mv_model)
+        if args.low_vram_mode:
+            texture_pipeline.enable_model_cpu_offload()
+            texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
+        print('3D Paint pipeline loaded')
         mesh = texture_pipeline(mesh, image=image, unwrap_method=args.unwrap_method, seed=args.seed)
         t5 = time.time()
         print(f"Texture generation took {t5 - t4:.2f} seconds")
@@ -121,7 +115,9 @@ if __name__ == "__main__":
                         help='Path to input images. Can specify multiple paths separated by spaces')
     parser.add_argument('--output_dir', type=str, default='./output', help='Path to output directory')
     parser.add_argument('--seed', type=int, default=0, help='Seed for the random number generator')
+    parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--fast', action='store_true', help='Use fast mode', default=False)
+    parser.add_argument('--mc_algo', type=str, default='dmc')
     parser.add_argument('--remesh_method', type=str, help='Re-mesh method. Must be either "im" or "bpt" if used.',
                         default=None)
     parser.add_argument('--unwrap_method', type=str,
@@ -129,8 +125,7 @@ if __name__ == "__main__":
     parser.add_argument('--face_count', type=int, default=100000, help='Maximum face count for the mesh')
     parser.add_argument('--texture', action='store_true', help='Texture the mesh', default=False)
     parser.add_argument('--mv_model', type=str, default='hunyuan3d-paint-v2-0', help='Multiview model to use')
-    parser.add_argument('--profile', type=str, default="3")
-    parser.add_argument('--verbose', type=str, default="1")
+    parser.add_argument('--low_vram_mode', action='store_true')
 
     args = parser.parse_args()
 

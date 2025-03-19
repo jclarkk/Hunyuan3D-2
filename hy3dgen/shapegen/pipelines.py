@@ -134,13 +134,13 @@ class Hunyuan3DDiTPipeline:
     @classmethod
     @synchronize_timer('Hunyuan3DDiTPipeline Model Loading')
     def from_single_file(
-            cls,
-            ckpt_path,
-            config_path,
-            device='cpu',
-            dtype=torch.float16,
-            use_safetensors=None,
-            **kwargs,
+        cls,
+        ckpt_path,
+        config_path,
+        device='cuda',
+        dtype=torch.float16,
+        use_safetensors=None,
+        **kwargs,
     ):
         # load config
         with open(config_path, 'r') as f:
@@ -167,18 +167,15 @@ class Hunyuan3DDiTPipeline:
         else:
             ckpt = torch.load(ckpt_path, map_location='cpu', weights_only=True)
         # load model
-        from accelerate import init_empty_weights
-        with init_empty_weights():
-            model = instantiate_from_config(config['model'])
-            vae = instantiate_from_config(config['vae'])
-            conditioner = instantiate_from_config(config['conditioner'])
-            image_processor = instantiate_from_config(config['image_processor'])
-            scheduler = instantiate_from_config(config['scheduler'])
-
-        model.load_state_dict(ckpt['model'], assign=True)
-        vae.load_state_dict(ckpt['vae'], assign=True)
+        model = instantiate_from_config(config['model'])
+        model.load_state_dict(ckpt['model'])
+        vae = instantiate_from_config(config['vae'])
+        vae.load_state_dict(ckpt['vae'])
+        conditioner = instantiate_from_config(config['conditioner'])
         if 'conditioner' in ckpt:
-            conditioner.load_state_dict(ckpt['conditioner'], assign=True)
+            conditioner.load_state_dict(ckpt['conditioner'])
+        image_processor = instantiate_from_config(config['image_processor'])
+        scheduler = instantiate_from_config(config['scheduler'])
 
         model_kwargs = dict(
             vae=vae,
@@ -701,7 +698,7 @@ class Hunyuan3DDiTFlowMatchingPipeline(Hunyuan3DDiTPipeline):
 
         self.set_surface_extractor(mc_algo)
 
-        device = torch.device("cuda") #self.device
+        device = self.device
         dtype = self.dtype
         do_classifier_free_guidance = guidance_scale >= 0 and not (
             hasattr(self.model, 'guidance_embed') and
