@@ -1,13 +1,3 @@
-# Open Source Model Licensed under the Apache License Version 2.0
-# and Other Licenses of the Third-Party Components therein:
-# The below Model in this distribution may have been modified by THL A29 Limited
-# ("Tencent Modifications"). All Tencent Modifications are Copyright (C) 2024 THL A29 Limited.
-
-# Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
-# The below software and/or models in this distribution may have been
-# modified by THL A29 Limited ("Tencent Modifications").
-# All Tencent Modifications are Copyright (C) THL A29 Limited.
-
 # Hunyuan 3D is licensed under the TENCENT HUNYUAN NON-COMMERCIAL LICENSE AGREEMENT
 # except for the third-party components listed below.
 # Hunyuan 3D does not impose any additional limitations beyond what is outlined
@@ -119,6 +109,8 @@ class HunyuanPaintPipeline(StableDiffusionPipeline):
         return_dict=True,
         **cached_condition,
     ):
+        device = self._execution_device
+
         if image is None:
             raise ValueError("Inputting embeddings not supported for this pipeline. Please pass an image.")
         assert not isinstance(image, torch.Tensor)
@@ -127,7 +119,7 @@ class HunyuanPaintPipeline(StableDiffusionPipeline):
 
         image_vae = torch.tensor(np.array(image) / 255.0)
         image_vae = image_vae.unsqueeze(0).permute(0, 3, 1, 2).unsqueeze(0)
-        image_vae = image_vae.to(device=self.vae.device, dtype=self.vae.dtype)
+        image_vae = image_vae.to(device=device, dtype=self.vae.dtype)
 
         batch_size = image_vae.shape[0]
         assert batch_size == 1
@@ -171,13 +163,13 @@ class HunyuanPaintPipeline(StableDiffusionPipeline):
             camera_info = cached_condition['camera_info_gen']  # B,N
             if isinstance(camera_info, List):
                 camera_info = torch.tensor(camera_info)
-            camera_info = camera_info.to(image_vae.device).to(torch.int64)
+            camera_info = camera_info.to(device).to(torch.int64)
             cached_condition['camera_info_gen'] = camera_info
         if 'camera_info_ref' in cached_condition:
             camera_info = cached_condition['camera_info_ref']  # B,N
             if isinstance(camera_info, List):
                 camera_info = torch.tensor(camera_info)
-            camera_info = camera_info.to(image_vae.device).to(torch.int64)
+            camera_info = camera_info.to(device).to(torch.int64)
             cached_condition['camera_info_ref'] = camera_info
 
         cached_condition['ref_latents'] = ref_latents
