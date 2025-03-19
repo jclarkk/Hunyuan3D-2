@@ -739,7 +739,7 @@ if __name__ == '__main__':
         try:
             from hy3dgen.texgen import Hunyuan3DPaintPipeline
 
-            texgen_worker = Hunyuan3DPaintPipeline.from_pretrained(args.texgen_model_path)
+            texgen_worker = Hunyuan3DPaintPipeline.from_pretrained(args.texgen_model_path, mv_model=args.mv_model)
             if args.low_vram_mode:
                 texgen_worker.enable_model_cpu_offload()
             # Not help much, ignore for now.
