@@ -823,7 +823,7 @@ class MeshRender():
         return texture_merge, trust_map_merge > 1E-8
 
     def uv_inpaint(self, texture, mask):
-        EXPECTED_VERSION = "1.1"
+        EXPECTED_VERSION = "1.2"
 
         try:
             from .mesh_processor import get_module_version

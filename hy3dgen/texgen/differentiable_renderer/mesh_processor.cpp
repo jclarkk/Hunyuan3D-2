@@ -12,9 +12,7 @@
 namespace py = pybind11;
 using namespace std;
 
-// Define version string
-// 1.0 = smoothing only, 1.1 = smoothing + inpainting
-const string MODULE_VERSION = "1.1";
+const string MODULE_VERSION = "1.2";  // Updated to 1.2 for multi-pass inpainting
 
 std::pair<py::array_t<float>, py::array_t<uint8_t>> meshVerticeInpaint_smooth(
     py::array_t<float> texture, py::array_t<uint8_t> mask,
@@ -172,59 +170,69 @@ std::pair<py::array_t<float>, py::array_t<uint8_t>> meshVerticeInpaint_smooth(
     }
     auto end_output = chrono::high_resolution_clock::now();
 
-    // Custom inpainting
+    // Multi-pass inpainting
     auto start_inpaint = chrono::high_resolution_clock::now();
-    vector<thread> inpaint_threads;
     int inpainted_pixels = 0;
     float sample_inpaint_color[3] = {0.0f, 0.0f, 0.0f};
-    auto inpaint_region = [&](int start_y, int end_y) {
-        int local_inpainted = 0;
-        for (int y = start_y; y < end_y; ++y) {
-            for (int x = 0; x < texture_width; ++x) {
-                int idx = y * texture_width + x;
-                if (new_mask_ptr[idx] != 255) {  // Uncolored pixel
-                    float sum_color[3] = {0.0f, 0.0f, 0.0f};
-                    float total_weight = 0.0f;
-                    int kernel_size = 3;  // 7x7 neighborhood
-                    for (int dy = -kernel_size; dy <= kernel_size; ++dy) {
-                        for (int dx = -kernel_size; dx <= kernel_size; ++dx) {
-                            int ny = y + dy;
-                            int nx = x + dx;
-                            if (ny >= 0 && ny < texture_height && nx >= 0 && nx < texture_width) {
-                                int n_idx = ny * texture_width + nx;
-                                if (new_mask_ptr[n_idx] == 255) {
-                                    float dist = sqrt(static_cast<float>(dx*dx + dy*dy));
-                                    float weight = 1.0f / max(dist, 1E-4f);
-                                    for (int c = 0; c < texture_channel; ++c) {
-                                        sum_color[c] += new_texture_ptr[n_idx * texture_channel + c] * weight;
+    int max_inpaint_iterations = 50;
+    int total_pixels = texture_height * texture_width;
+
+    for (int iter = 0; iter < max_inpaint_iterations; ++iter) {
+        vector<thread> inpaint_threads;
+        int iter_inpainted = 0;
+
+        auto inpaint_region = [&](int start_y, int end_y) {
+            int local_inpainted = 0;
+            for (int y = start_y; y < end_y; ++y) {
+                for (int x = 0; x < texture_width; ++x) {
+                    int idx = y * texture_width + x;
+                    if (new_mask_ptr[idx] != 255) {
+                        float sum_color[3] = {0.0f, 0.0f, 0.0f};
+                        float total_weight = 0.0f;
+                        int kernel_size = 3;
+                        for (int dy = -kernel_size; dy <= kernel_size; ++dy) {
+                            for (int dx = -kernel_size; dx <= kernel_size; ++dx) {
+                                int ny = y + dy;
+                                int nx = x + dx;
+                                if (ny >= 0 && ny < texture_height && nx >= 0 && nx < texture_width) {
+                                    int n_idx = ny * texture_width + nx;
+                                    if (new_mask_ptr[n_idx] == 255) {
+                                        float dist = sqrt(static_cast<float>(dx*dx + dy*dy));
+                                        float weight = 1.0f / max(dist, 1E-4f);
+                                        for (int c = 0; c < texture_channel; ++c) {
+                                            sum_color[c] += new_texture_ptr[n_idx * texture_channel + c] * weight;
+                                        }
+                                        total_weight += weight;
                                     }
-                                    total_weight += weight;
                                 }
                             }
                         }
-                    }
-                    if (total_weight > 0.0f) {
-                        for (int c = 0; c < texture_channel; ++c) {
-                            new_texture_ptr[idx * texture_channel + c] = sum_color[c] / total_weight;
-                            if (local_inpainted == 0) sample_inpaint_color[c] = sum_color[c] / total_weight;
+                        if (total_weight > 0.0f) {
+                            for (int c = 0; c < texture_channel; ++c) {
+                                new_texture_ptr[idx * texture_channel + c] = sum_color[c] / total_weight;
+                                if (local_inpainted == 0 && iter == 0) sample_inpaint_color[c] = sum_color[c] / total_weight;
+                            }
+                            new_mask_ptr[idx] = 255;
+                            local_inpainted++;
                         }
-                        new_mask_ptr[idx] = 255;
-                        local_inpainted++;
                     }
                 }
             }
-        }
-        lock_guard<mutex> lock(mtx);
-        inpainted_pixels += local_inpainted;
-    };
+            lock_guard<mutex> lock(mtx);
+            iter_inpainted += local_inpainted;
+        };
 
-    int inpaint_chunk_size = texture_height / thread_count;
-    for (int t = 0; t < thread_count; ++t) {
-        int start = t * inpaint_chunk_size;
-        int end = (t == thread_count - 1) ? texture_height : start + inpaint_chunk_size;
-        inpaint_threads.emplace_back(inpaint_region, start, end);
+        int inpaint_chunk_size = texture_height / thread_count;
+        for (int t = 0; t < thread_count; ++t) {
+            int start = t * inpaint_chunk_size;
+            int end = (t == thread_count - 1) ? texture_height : start + inpaint_chunk_size;
+            inpaint_threads.emplace_back(inpaint_region, start, end);
+        }
+        for (auto& t : inpaint_threads) t.join();
+
+        inpainted_pixels += iter_inpainted;
+        if (iter_inpainted == 0) break;
     }
-    for (auto& t : inpaint_threads) t.join();
     auto end_inpaint = chrono::high_resolution_clock::now();
 
     return {new_texture, new_mask};
@@ -242,7 +250,6 @@ std::pair<py::array_t<float>, py::array_t<uint8_t>> meshVerticeInpaint(
     }
 }
 
-// Function to return the module version
 string get_module_version() {
     return MODULE_VERSION;
 }
