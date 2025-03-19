@@ -482,7 +482,7 @@ def build_app():
                             num_chunks = gr.Slider(maximum=5000000, minimum=1000, value=8000,
                                                    label='Number of Chunks', min_width=100)
                         with gr.Row():
-                            texture_size = gr.Slider(minimum=1024, maximum=2048, step=1024, value=1024,
+                            texture_size = gr.Slider(minimum=1024, maximum=3072, step=1024, value=2048,
                                                      label='Texture Resolution')
                             enhance_texture = gr.Checkbox(label='Enhance Texture Angles', value=False)
                             pbr = gr.Checkbox(label='PBR Texture (Experimental, use the README in folder)', value=False)
