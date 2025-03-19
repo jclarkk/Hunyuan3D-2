@@ -35,7 +35,7 @@ def run(args):
     # Preprocess the image
     image = Image.open(image_path)
     rmbg_remover = RMBGRemover()
-    image = rmbg_remover(image)
+    image = rmbg_remover(image, height=1024, width=1024)
 
     processed_image_name = os.path.basename(image_path).split('.')[0] + '_input.png'
     image.save(os.path.join(args.output_dir, processed_image_name))
@@ -63,10 +63,9 @@ def run(args):
     print('3D DiT pipeline loaded. Took {:.2f} seconds'.format(t2 - t1))
 
     # Generate mesh
-    steps = 5 if args.fast else 30
+    steps = 15 if args.fast else 30
     mesh = mesh_pipeline(image=image,
                          num_inference_steps=steps,
-                         mc_algo=mc_algo,
                          octree_resolution=512,
                          generator=torch.manual_seed(args.seed))[0]
     mesh = FloaterRemover()(mesh)
