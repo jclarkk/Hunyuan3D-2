@@ -1,13 +1,3 @@
-# Open Source Model Licensed under the Apache License Version 2.0
-# and Other Licenses of the Third-Party Components therein:
-# The below Model in this distribution may have been modified by THL A29 Limited
-# ("Tencent Modifications"). All Tencent Modifications are Copyright (C) 2024 THL A29 Limited.
-
-# Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
-# The below software and/or models in this distribution may have been
-# modified by THL A29 Limited ("Tencent Modifications").
-# All Tencent Modifications are Copyright (C) THL A29 Limited.
-
 # Hunyuan 3D is licensed under the TENCENT HUNYUAN NON-COMMERCIAL LICENSE AGREEMENT
 # except for the third-party components listed below.
 # Hunyuan 3D does not impose any additional limitations beyond what is outlined
@@ -22,7 +12,6 @@
 # fine-tuning enabling code and other elements of the foregoing made publicly available
 # by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
 
-
 import os
 
 import torch
@@ -30,8 +19,8 @@ import torch.nn as nn
 import yaml
 
 from .attention_blocks import FourierEmbedder, Transformer, CrossAttentionDecoder
-from .surface_extractors import MCSurfaceExtractor
-from .volume_decoders import VanillaVolumeDecoder
+from .surface_extractors import MCSurfaceExtractor, SurfaceExtractors
+from .volume_decoders import VanillaVolumeDecoder, FlashVDMVolumeDecoding, HierarchicalVolumeDecoding
 from ...utils import logger, synchronize_timer, smart_load_model
 
 
@@ -119,6 +108,25 @@ class VectsetVAE(nn.Module):
         with synchronize_timer('Surface extraction'):
             outputs = self.surface_extractor(grid_logits, **kwargs)
         return outputs
+
+    def enable_flashvdm_decoder(
+        self,
+        enabled: bool = True,
+        adaptive_kv_selection=True,
+        topk_mode='mean',
+        mc_algo='dmc',
+    ):
+        if enabled:
+            if adaptive_kv_selection:
+                self.volume_decoder = FlashVDMVolumeDecoding(topk_mode)
+            else:
+                self.volume_decoder = HierarchicalVolumeDecoding()
+            if mc_algo not in SurfaceExtractors.keys():
+                raise ValueError(f'Unsupported mc_algo {mc_algo}, available: {list(SurfaceExtractors.keys())}')
+            self.surface_extractor = SurfaceExtractors[mc_algo]()
+        else:
+            self.volume_decoder = VanillaVolumeDecoder()
+            self.surface_extractor = MCSurfaceExtractor()
 
 
 class ShapeVAE(VectsetVAE):

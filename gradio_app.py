@@ -1,3 +1,17 @@
+# Hunyuan 3D is licensed under the TENCENT HUNYUAN NON-COMMERCIAL LICENSE AGREEMENT
+# except for the third-party components listed below.
+# Hunyuan 3D does not impose any additional limitations beyond what is outlined
+# in the repsective licenses of these third-party components.
+# Users must comply with all terms and conditions of original licenses of these third-party
+# components and must ensure that the usage of the third party components adheres to
+# all relevant laws and regulations.
+
+# For avoidance of doubts, Hunyuan 3D means the large language models and
+# their software and algorithms, including trained model weights, parameters (including
+# optimizer states), machine-learning model code, inference-enabling code, training-enabling code,
+# fine-tuning enabling code and other elements of the foregoing made publicly available
+# by Tencent in accordance with TENCENT HUNYUAN COMMUNITY LICENSE AGREEMENT.
+
 import os
 import random
 import shutil
@@ -11,6 +25,7 @@ import trimesh
 import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+import uuid
 
 from hy3dgen.shapegen.utils import logger
 
@@ -46,17 +61,25 @@ def get_example_mv_list():
     return mv_list
 
 
-def gen_save_folder(max_size=60):
+def gen_save_folder(max_size=200):
     os.makedirs(SAVE_DIR, exist_ok=True)
-    exists = set(int(_) for _ in os.listdir(SAVE_DIR) if _.isdigit())
-    cur_id = min(set(range(max_size)) - exists) if len(exists) < max_size else -1
-    if os.path.exists(f"{SAVE_DIR}/{(cur_id + 1) % max_size}"):
-        shutil.rmtree(f"{SAVE_DIR}/{(cur_id + 1) % max_size}")
-        print(f"remove {SAVE_DIR}/{(cur_id + 1) % max_size} success !!!")
-    save_folder = f"{SAVE_DIR}/{max(0, cur_id)}"
-    os.makedirs(save_folder, exist_ok=True)
-    print(f"mkdir {save_folder} suceess !!!")
-    return save_folder
+
+    # 获取所有文件夹路径
+    dirs = [f for f in Path(SAVE_DIR).iterdir() if f.is_dir()]
+
+    # 如果文件夹数量超过 max_size，删除创建时间最久的文件夹
+    if len(dirs) >= max_size:
+        # 按创建时间排序，最久的排在前面
+        oldest_dir = min(dirs, key=lambda x: x.stat().st_ctime)
+        shutil.rmtree(oldest_dir)
+        print(f"Removed the oldest folder: {oldest_dir}")
+
+    # 生成一个新的 uuid 文件夹名称
+    new_folder = os.path.join(SAVE_DIR, str(uuid.uuid4()))
+    os.makedirs(new_folder, exist_ok=True)
+    print(f"Created new folder: {new_folder}")
+
+    return new_folder
 
 
 def export_mesh(mesh, save_folder, textured=False, type='glb'):
@@ -164,7 +187,7 @@ def _gen_shape(
     if image is None:
         start_time = time.time()
         try:
-            image = t2i_worker(caption, seed=seed)
+            image = t2i_worker(caption)
         except Exception as e:
             raise gr.Error(f"Text to 3D is disable. Please enable it by `python gradio_app.py --enable_t23d`.")
         time_meta['text2image'] = time.time() - start_time
@@ -270,7 +293,8 @@ def generation_all(
     path_textured = export_mesh(textured_mesh, save_folder, textured=True)
     model_viewer_html_textured = build_model_viewer_html(save_folder, height=HTML_HEIGHT, width=HTML_WIDTH,
                                                          textured=True)
-    torch.cuda.empty_cache()
+    if args.low_vram_mode:
+        torch.cuda.empty_cache()
     return (
         gr.update(value=path),
         gr.update(value=path_textured),
@@ -316,7 +340,8 @@ def shape_generation(
 
     path = export_mesh(mesh, save_folder, textured=False)
     model_viewer_html = build_model_viewer_html(save_folder, height=HTML_HEIGHT, width=HTML_WIDTH)
-    torch.cuda.empty_cache()
+    if args.low_vram_mode:
+        torch.cuda.empty_cache()
     return (
         gr.update(value=path),
         model_viewer_html,
@@ -331,6 +356,8 @@ def build_app():
         title = 'Hunyuan3D-2mv: Image to 3D Generation with 1-4 Views'
     if 'mini' in args.subfolder:
         title = 'Hunyuan3D-2mini: Strong 0.6B Image to Shape Generator'
+    if TURBO_MODE:
+        title = title.replace(':', '-Turbo: Fast ')
 
     title_html = f"""
     <div style="font-size: 2em; font-weight: bold; text-align: center; margin-bottom: 5px">
@@ -399,7 +426,15 @@ def build_app():
                     file_out = gr.File(label="File", visible=False)
                     file_out2 = gr.File(label="File", visible=False)
 
-                with gr.Tabs(selected='tab_export'):
+                with gr.Tabs(selected='tab_options' if TURBO_MODE else 'tab_export'):
+                    with gr.Tab("Options", id='tab_options', visible=TURBO_MODE):
+                        gen_mode = gr.Radio(label='Generation Mode',
+                                            info='Recommendation: Turbo for most cases, Fast for very complex cases, Standard seldom use.',
+                                            choices=['Turbo', 'Fast', 'Standard'], value='Turbo')
+                        decode_mode = gr.Radio(label='Decoding Mode',
+                                               info='The resolution for exporting mesh from generated vectset',
+                                               choices=['Low', 'Standard', 'High'],
+                                               value='Standard')
                     with gr.Tab('Advanced Options', id='tab_advanced_options'):
                         with gr.Row():
                             check_box_rembg = gr.Checkbox(value=True, label='Remove Background', min_width=100)
@@ -415,7 +450,7 @@ def build_app():
                         with gr.Row():
                             num_steps = gr.Slider(maximum=100,
                                                   minimum=1,
-                                                  value=30,
+                                                  value=5 if 'turbo' in args.subfolder else 30,
                                                   step=1, label='Inference Steps')
                             octree_resolution = gr.Slider(maximum=512, minimum=16, value=256, label='Octree Resolution')
                         with gr.Row():
@@ -541,6 +576,26 @@ def build_app():
             outputs=[tabs_output],
         )
 
+        def on_gen_mode_change(value):
+            if value == 'Turbo':
+                return gr.update(value=5)
+            elif value == 'Fast':
+                return gr.update(value=10)
+            else:
+                return gr.update(value=30)
+
+        gen_mode.change(on_gen_mode_change, inputs=[gen_mode], outputs=[num_steps])
+
+        def on_decode_mode_change(value):
+            if value == 'Low':
+                return gr.update(value=196)
+            elif value == 'Standard':
+                return gr.update(value=256)
+            else:
+                return gr.update(value=384)
+
+        decode_mode.change(on_decode_mode_change, inputs=[decode_mode], outputs=[octree_resolution])
+
         def on_export_click(file_out, file_out2, file_type, reduce_face, export_texture, target_face_num):
             if file_out is None:
                 raise gr.Error('Please generate a mesh first.')
@@ -591,16 +646,18 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_path", type=str, default='tencent/Hunyuan3D-2mini')
-    parser.add_argument("--subfolder", type=str, default='hunyuan3d-dit-v2-mini')
+    parser.add_argument("--subfolder", type=str, default='hunyuan3d-dit-v2-mini-turbo')
     parser.add_argument("--texgen_model_path", type=str, default='tencent/Hunyuan3D-2')
     parser.add_argument('--port', type=int, default=8080)
     parser.add_argument('--host', type=str, default='0.0.0.0')
     parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--mc_algo', type=str, default='mc')
+    parser.add_argument('--mc_algo', type=str, default='dmc')
     parser.add_argument('--cache-path', type=str, default='gradio_cache')
     parser.add_argument('--enable_t23d', action='store_true')
     parser.add_argument('--disable_tex', action='store_true')
+    parser.add_argument('--enable_flashvdm', action='store_true')
     parser.add_argument('--compile', action='store_true')
+    parser.add_argument('--low_vram_mode', action='store_true')
     args = parser.parse_args()
 
     SAVE_DIR = args.cache_path
@@ -608,6 +665,7 @@ if __name__ == '__main__':
 
     CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
     MV_MODE = 'mv' in args.model_path
+    TURBO_MODE = 'turbo' in args.subfolder
 
     HTML_HEIGHT = 690 if MV_MODE else 650
     HTML_WIDTH = 500
@@ -637,7 +695,8 @@ if __name__ == '__main__':
             from hy3dgen.texgen import Hunyuan3DPaintPipeline
 
             texgen_worker = Hunyuan3DPaintPipeline.from_pretrained(args.texgen_model_path)
-            texgen_worker.enable_model_cpu_offload()
+            if args.low_vram_mode:
+                texgen_worker.enable_model_cpu_offload()
             # Not help much, ignore for now.
             # if args.compile:
             #     texgen_worker.models['delight_model'].pipeline.unet.compile()
@@ -670,6 +729,9 @@ if __name__ == '__main__':
         use_safetensors=True,
         device=args.device,
     )
+    if args.enable_flashvdm:
+        mc_algo = 'mc' if args.device in ['cpu', 'mps'] else args.mc_algo
+        i23d_worker.enable_flashvdm(mc_algo=mc_algo)
     if args.compile:
         i23d_worker.compile()
 
@@ -686,7 +748,8 @@ if __name__ == '__main__':
     app.mount("/static", StaticFiles(directory=static_dir, html=True), name="static")
     shutil.copytree('./assets/env_maps', os.path.join(static_dir, 'env_maps'), dirs_exist_ok=True)
 
-    torch.cuda.empty_cache()
+    if args.low_vram_mode:
+        torch.cuda.empty_cache()
     demo = build_app()
     app = gr.mount_gradio_app(app, demo, path="/")
     uvicorn.run(app, host=args.host, port=args.port, workers=1)

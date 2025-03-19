@@ -103,7 +103,7 @@ class ImageEncoder(nn.Module):
 
         return last_hidden_state
 
-    def unconditional_embedding(self, batch_size):
+    def unconditional_embedding(self, batch_size, **kwargs):
         device = next(self.model.parameters()).device
         dtype = next(self.model.parameters()).dtype
         zero = torch.zeros(
@@ -159,9 +159,6 @@ class DinoImageEncoderMV(DinoImageEncoder):
         image = image.to(self.model.device, dtype=self.model.dtype)
 
         bs, num_views, c, h, w = image.shape
-        # TODO: find a better place to set view_num?
-        self.view_num = num_views
-
         image = image.view(bs * num_views, c, h, w)
 
         inputs = self.transform(image)
@@ -190,12 +187,12 @@ class DinoImageEncoderMV(DinoImageEncoder):
                                                    last_hidden_state.shape[-1])
         return last_hidden_state
 
-    def unconditional_embedding(self, batch_size):
+    def unconditional_embedding(self, batch_size, view_idxs=None, **kwargs):
         device = next(self.model.parameters()).device
         dtype = next(self.model.parameters()).dtype
         zero = torch.zeros(
             batch_size,
-            self.num_patches * self.view_num,
+            self.num_patches * len(view_idxs[0]),
             self.model.config.hidden_size,
             device=device,
             dtype=dtype,
@@ -224,17 +221,17 @@ class DualImageEncoder(nn.Module):
         self.main_image_encoder = build_image_encoder(main_image_encoder)
         self.additional_image_encoder = build_image_encoder(additional_image_encoder)
 
-    def forward(self, image, mask=None):
+    def forward(self, image, mask=None, **kwargs):
         outputs = {
-            'main': self.main_image_encoder(image, mask=mask),
-            'additional': self.additional_image_encoder(image, mask=mask),
+            'main': self.main_image_encoder(image, mask=mask, **kwargs),
+            'additional': self.additional_image_encoder(image, mask=mask, **kwargs),
         }
         return outputs
 
-    def unconditional_embedding(self, batch_size):
+    def unconditional_embedding(self, batch_size, **kwargs):
         outputs = {
-            'main': self.main_image_encoder.unconditional_embedding(batch_size),
-            'additional': self.additional_image_encoder.unconditional_embedding(batch_size),
+            'main': self.main_image_encoder.unconditional_embedding(batch_size, **kwargs),
+            'additional': self.additional_image_encoder.unconditional_embedding(batch_size, **kwargs),
         }
         return outputs
 
@@ -253,8 +250,8 @@ class SingleImageEncoder(nn.Module):
         }
         return outputs
 
-    def unconditional_embedding(self, batch_size):
+    def unconditional_embedding(self, batch_size, **kwargs):
         outputs = {
-            'main': self.main_image_encoder.unconditional_embedding(batch_size),
+            'main': self.main_image_encoder.unconditional_embedding(batch_size, **kwargs),
         }
         return outputs

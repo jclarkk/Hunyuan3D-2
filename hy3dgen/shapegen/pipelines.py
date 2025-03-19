@@ -1,13 +1,3 @@
-# Open Source Model Licensed under the Apache License Version 2.0
-# and Other Licenses of the Third-Party Components therein:
-# The below Model in this distribution may have been modified by THL A29 Limited
-# ("Tencent Modifications"). All Tencent Modifications are Copyright (C) 2024 THL A29 Limited.
-
-# Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
-# The below software and/or models in this distribution may have been
-# modified by THL A29 Limited ("Tencent Modifications").
-# All Tencent Modifications are Copyright (C) THL A29 Limited.
-
 # Hunyuan 3D is licensed under the TENCENT HUNYUAN NON-COMMERCIAL LICENSE AGREEMENT
 # except for the third-party components listed below.
 # Hunyuan 3D does not impose any additional limitations beyond what is outlined
@@ -34,8 +24,10 @@ import trimesh
 import yaml
 from PIL import Image
 from diffusers.utils.torch_utils import randn_tensor
+from diffusers.utils.import_utils import is_accelerate_version, is_accelerate_available
 from tqdm import tqdm
 
+from .models.autoencoders import ShapeVAE
 from .models.autoencoders import SurfaceExtractors
 from .utils import logger, synchronize_timer, smart_load_model
 
@@ -136,6 +128,9 @@ def instantiate_from_config(config, **kwargs):
 
 
 class Hunyuan3DDiTPipeline:
+    model_cpu_offload_seq = "conditioner->model->vae"
+    _exclude_from_cpu_offload = []
+
     @classmethod
     @synchronize_timer('Hunyuan3DDiTPipeline Model Loading')
     def from_single_file(
@@ -255,6 +250,48 @@ class Hunyuan3DDiTPipeline:
         self.model = torch.compile(self.model)
         self.conditioner = torch.compile(self.conditioner)
 
+    def enable_flashvdm(
+        self,
+        enabled: bool = True,
+        adaptive_kv_selection=True,
+        topk_mode='mean',
+        mc_algo='dmc',
+        replace_vae=True,
+    ):
+        if enabled:
+            model_path = self.kwargs['from_pretrained_kwargs']['model_path']
+            turbo_vae_mapping = {
+                'Hunyuan3D-2': ('tencent/Hunyuan3D-2', 'hunyuan3d-vae-v2-0-turbo'),
+                'Hunyuan3D-2mv': ('tencent/Hunyuan3D-2', 'hunyuan3d-vae-v2-0-turbo'),
+                'Hunyuan3D-2mini': ('tencent/Hunyuan3D-2mini', 'hunyuan3d-vae-v2-mini-turbo'),
+            }
+            model_name = model_path.split('/')[-1]
+            if replace_vae and model_name in turbo_vae_mapping:
+                model_path, subfolder = turbo_vae_mapping[model_name]
+                self.vae = ShapeVAE.from_pretrained(
+                    model_path, subfolder=subfolder,
+                    use_safetensors=self.kwargs['from_pretrained_kwargs']['use_safetensors'],
+                    device=self.device,
+                )
+            self.vae.enable_flashvdm_decoder(
+                enabled=enabled,
+                adaptive_kv_selection=adaptive_kv_selection,
+                topk_mode=topk_mode,
+                mc_algo=mc_algo
+            )
+        else:
+            model_path = self.kwargs['from_pretrained_kwargs']['model_path']
+            vae_mapping = {
+                'Hunyuan3D-2': ('tencent/Hunyuan3D-2', 'hunyuan3d-vae-v2-0'),
+                'Hunyuan3D-2mv': ('tencent/Hunyuan3D-2', 'hunyuan3d-vae-v2-0'),
+                'Hunyuan3D-2mini': ('tencent/Hunyuan3D-2mini', 'hunyuan3d-vae-v2-mini'),
+            }
+            model_name = model_path.split('/')[-1]
+            if model_name in vae_mapping:
+                model_path, subfolder = vae_mapping[model_name]
+                self.vae = ShapeVAE.from_pretrained(model_path, subfolder=subfolder)
+            self.vae.enable_flashvdm_decoder(enabled=False)
+
     def to(self, device=None, dtype=None):
         if dtype is not None:
             self.dtype = dtype
@@ -267,13 +304,124 @@ class Hunyuan3DDiTPipeline:
             self.model.to(device)
             self.conditioner.to(device)
 
+    @property
+    def _execution_device(self):
+        r"""
+        Returns the device on which the pipeline's models will be executed. After calling
+        [`~DiffusionPipeline.enable_sequential_cpu_offload`] the execution device can only be inferred from
+        Accelerate's module hooks.
+        """
+        for name, model in self.components.items():
+            if not isinstance(model, torch.nn.Module) or name in self._exclude_from_cpu_offload:
+                continue
+
+            if not hasattr(model, "_hf_hook"):
+                return self.device
+            for module in model.modules():
+                if (
+                    hasattr(module, "_hf_hook")
+                    and hasattr(module._hf_hook, "execution_device")
+                    and module._hf_hook.execution_device is not None
+                ):
+                    return torch.device(module._hf_hook.execution_device)
+        return self.device
+
+    def enable_model_cpu_offload(self, gpu_id: Optional[int] = None, device: Union[torch.device, str] = "cuda"):
+        r"""
+        Offloads all models to CPU using accelerate, reducing memory usage with a low impact on performance. Compared
+        to `enable_sequential_cpu_offload`, this method moves one whole model at a time to the GPU when its `forward`
+        method is called, and the model remains in GPU until the next model runs. Memory savings are lower than with
+        `enable_sequential_cpu_offload`, but performance is much better due to the iterative execution of the `unet`.
+
+        Arguments:
+            gpu_id (`int`, *optional*):
+                The ID of the accelerator that shall be used in inference. If not specified, it will default to 0.
+            device (`torch.Device` or `str`, *optional*, defaults to "cuda"):
+                The PyTorch device type of the accelerator that shall be used in inference. If not specified, it will
+                default to "cuda".
+        """
+        if self.model_cpu_offload_seq is None:
+            raise ValueError(
+                "Model CPU offload cannot be enabled because no `model_cpu_offload_seq` class attribute is set."
+            )
+
+        if is_accelerate_available() and is_accelerate_version(">=", "0.17.0.dev0"):
+            from accelerate import cpu_offload_with_hook
+        else:
+            raise ImportError("`enable_model_cpu_offload` requires `accelerate v0.17.0` or higher.")
+
+        torch_device = torch.device(device)
+        device_index = torch_device.index
+
+        if gpu_id is not None and device_index is not None:
+            raise ValueError(
+                f"You have passed both `gpu_id`={gpu_id} and an index as part of the passed device `device`={device}"
+                f"Cannot pass both. Please make sure to either not define `gpu_id` or not pass the index as part of the device: `device`={torch_device.type}"
+            )
+
+        # _offload_gpu_id should be set to passed gpu_id (or id in passed `device`) or default to previously set id or default to 0
+        self._offload_gpu_id = gpu_id or torch_device.index or getattr(self, "_offload_gpu_id", 0)
+
+        device_type = torch_device.type
+        device = torch.device(f"{device_type}:{self._offload_gpu_id}")
+
+        if self.device.type != "cpu":
+            self.to("cpu")
+            device_mod = getattr(torch, self.device.type, None)
+            if hasattr(device_mod, "empty_cache") and device_mod.is_available():
+                device_mod.empty_cache()  # otherwise we don't see the memory savings (but they probably exist)
+
+        all_model_components = {k: v for k, v in self.components.items() if isinstance(v, torch.nn.Module)}
+
+        self._all_hooks = []
+        hook = None
+        for model_str in self.model_cpu_offload_seq.split("->"):
+            model = all_model_components.pop(model_str, None)
+            if not isinstance(model, torch.nn.Module):
+                continue
+
+            _, hook = cpu_offload_with_hook(model, device, prev_module_hook=hook)
+            self._all_hooks.append(hook)
+
+        # CPU offload models that are not in the seq chain unless they are explicitly excluded
+        # these models will stay on CPU until maybe_free_model_hooks is called
+        # some models cannot be in the seq chain because they are iteratively called, such as controlnet
+        for name, model in all_model_components.items():
+            if not isinstance(model, torch.nn.Module):
+                continue
+
+            if name in self._exclude_from_cpu_offload:
+                model.to(device)
+            else:
+                _, hook = cpu_offload_with_hook(model, device)
+                self._all_hooks.append(hook)
+
+    def maybe_free_model_hooks(self):
+        r"""
+        Function that offloads all components, removes all model hooks that were added when using
+        `enable_model_cpu_offload` and then applies them again. In case the model has not been offloaded this function
+        is a no-op. Make sure to add this function to the end of the `__call__` function of your pipeline so that it
+        functions correctly when applying enable_model_cpu_offload.
+        """
+        if not hasattr(self, "_all_hooks") or len(self._all_hooks) == 0:
+            # `enable_model_cpu_offload` has not be called, so silently do nothing
+            return
+
+        for hook in self._all_hooks:
+            # offload model and remove hook from model
+            hook.offload()
+            hook.remove()
+
+        # make sure the model is in the same state as before calling it
+        self.enable_model_cpu_offload()
+
     @synchronize_timer('Encode cond')
     def encode_cond(self, image, additional_cond_inputs, do_classifier_free_guidance, dual_guidance):
         bsz = image.shape[0]
         cond = self.conditioner(image=image, **additional_cond_inputs)
 
         if do_classifier_free_guidance:
-            un_cond = self.conditioner.unconditional_embedding(bsz)
+            un_cond = self.conditioner.unconditional_embedding(bsz, **additional_cond_inputs)
 
             if dual_guidance:
                 un_cond_drop_main = copy.deepcopy(un_cond)
@@ -289,8 +437,6 @@ class Hunyuan3DDiTPipeline:
 
                 cond = cat_recursive(cond, un_cond_drop_main, un_cond)
             else:
-                un_cond = self.conditioner.unconditional_embedding(bsz)
-
                 def cat_recursive(a, b):
                     if isinstance(a, torch.Tensor):
                         return torch.cat([a, b], dim=0).to(self.dtype)
@@ -429,10 +575,14 @@ class Hunyuan3DDiTPipeline:
                                       getattr(self.model, 'guidance_cond_proj_dim', None) is None
         dual_guidance = dual_guidance_scale >= 0 and dual_guidance
 
-        image, mask = self.prepare_image(image)
-        cond = self.encode_cond(image=image,
-                                do_classifier_free_guidance=do_classifier_free_guidance,
-                                dual_guidance=dual_guidance)
+        cond_inputs = self.prepare_image(image)
+        image = cond_inputs.pop('image')
+        cond = self.encode_cond(
+            image=image,
+            additional_cond_inputs=cond_inputs,
+            do_classifier_free_guidance=do_classifier_free_guidance,
+            dual_guidance=False,
+        )
         batch_size = image.shape[0]
 
         t_dtype = torch.long

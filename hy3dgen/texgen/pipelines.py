@@ -1,13 +1,3 @@
-# Open Source Model Licensed under the Apache License Version 2.0
-# and Other Licenses of the Third-Party Components therein:
-# The below Model in this distribution may have been modified by THL A29 Limited
-# ("Tencent Modifications"). All Tencent Modifications are Copyright (C) 2024 THL A29 Limited.
-
-# Copyright (C) 2024 THL A29 Limited, a Tencent company.  All rights reserved.
-# The below software and/or models in this distribution may have been
-# modified by THL A29 Limited ("Tencent Modifications").
-# All Tencent Modifications are Copyright (C) THL A29 Limited.
-
 # Hunyuan 3D is licensed under the TENCENT HUNYUAN NON-COMMERCIAL LICENSE AGREEMENT
 # except for the third-party components listed below.
 # Hunyuan 3D does not impose any additional limitations beyond what is outlined
@@ -72,7 +62,10 @@ class Hunyuan3DPaintPipeline:
                 try:
                     import huggingface_hub
                     # download from huggingface
-                    model_path = huggingface_hub.snapshot_download(repo_id=original_model_path)
+                    model_path = huggingface_hub.snapshot_download(repo_id=original_model_path,
+                                                                   allow_patterns=["hunyuan3d-delight-v2-0/*"])
+                    model_path = huggingface_hub.snapshot_download(repo_id=original_model_path,
+                                                                   allow_patterns=["hunyuan3d-paint-v2-0/*"])
                     delight_model_path = os.path.join(model_path, 'hunyuan3d-delight-v2-0')
                     multiview_model_path = os.path.join(model_path, 'hunyuan3d-paint-v2-0')
                     return cls(Hunyuan3DTexGenConfig(delight_model_path, multiview_model_path))
