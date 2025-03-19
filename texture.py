@@ -9,7 +9,6 @@ import os
 import time
 import trimesh
 from PIL import Image
-from mmgp import offload
 
 from hy3dgen.rmbg import RMBGRemover
 from hy3dgen.shapegen.postprocessors import import_mesh, reduce_face, FaceReducer

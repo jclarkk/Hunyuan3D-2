@@ -52,27 +52,28 @@ def run(args):
             subfolder='hunyuan3d-dit-v2-0-turbo',
             variant='fp16'
         )
-        mesh_pipeline.enable_flashvdm(mc_algo=mc_algo)
     else:
         mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
             'tencent/Hunyuan3D-2',
             use_safetensors=True
         )
+    mesh_pipeline.enable_flashvdm(mc_algo=mc_algo)
 
     t2 = time.time()
     print('3D DiT pipeline loaded. Took {:.2f} seconds'.format(t2 - t1))
 
     # Generate mesh
-    steps = 15 if args.fast else 30
     mesh = mesh_pipeline(image=image,
-                         num_inference_steps=steps,
+                         num_inference_steps=args.steps,
                          octree_resolution=512,
                          generator=torch.manual_seed(args.seed))[0]
+    t3 = time.time()
+    print(f"Mesh generation took {t3 - t2:.2f} seconds")
     mesh = FloaterRemover()(mesh)
     mesh = DegenerateFaceRemover()(mesh)
     mesh = FaceReducer()(mesh, max_facenum=args.face_count, remesh_method=args.remesh_method)
-    t3 = time.time()
-    print(f"Mesh generation took {t3 - t2:.2f} seconds")
+    t4 = time.time()
+    print(f"Mesh Optimization took {t4 - t3:.2f} seconds")
 
     # Generate texture
     if args.texture:
@@ -81,17 +82,17 @@ def run(args):
 
         # Reload image to use maximum possible resolution for texture model
         image = Image.open(image_path)
-        t4 = time.time()
+        t5 = time.time()
         texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2', mv_model=args.mv_model)
         if args.low_vram_mode:
             texture_pipeline.enable_model_cpu_offload()
             texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
         print('3D Paint pipeline loaded')
         mesh = texture_pipeline(mesh, image=image, unwrap_method=args.unwrap_method, seed=args.seed)
-        t5 = time.time()
-        print(f"Texture generation took {t5 - t4:.2f} seconds")
+        t6 = time.time()
+        print(f"Texture generation took {t6 - t5:.2f} seconds")
     else:
-        t5 = t3
+        t6 = t3
 
     os.makedirs(args.output_dir, exist_ok=True)
 
@@ -103,7 +104,7 @@ def run(args):
     mesh.export(os.path.join(args.output_dir, '{}.glb'.format(output_name)))
 
     print(f"Output saved to {args.output_dir}/{output_name}.glb")
-    print(f"Total time taken: {t5 - t0:.2f} seconds")
+    print(f"Total time taken: {t6 - t0:.2f} seconds")
     sys.stdout.flush()
 
 
@@ -114,6 +115,7 @@ if __name__ == "__main__":
                         help='Path to input images. Can specify multiple paths separated by spaces')
     parser.add_argument('--output_dir', type=str, default='./output', help='Path to output directory')
     parser.add_argument('--seed', type=int, default=0, help='Seed for the random number generator')
+    parser.add_argument('--steps', type=int, default=30, help='Number of inference steps')
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--fast', action='store_true', help='Use fast mode', default=False)
     parser.add_argument('--mc_algo', type=str, default='dmc')
