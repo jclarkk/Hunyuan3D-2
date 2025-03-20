@@ -24,8 +24,8 @@ def run(args):
     if args.unwrap_method not in ['xatlas', 'open3d', 'bpy']:
         raise ValueError("Unwrap method must be either 'xatlas', 'open3d' or 'bpy'")
 
-    if args.remesh_method not in [None, 'im', 'bpt', 'simplify', 'None']:
-        raise ValueError("Re-mesh type must be either 'im', 'bpt' or 'simplify'")
+    if args.remesh_method not in [None, 'im', 'bpt', 'deepmesh', 'None']:
+        raise ValueError("Re-mesh type must be either 'im', 'bpt' or 'deepmesh'")
 
     # Only one image supported right now
     image_path = args.image_paths[0]
@@ -35,7 +35,7 @@ def run(args):
     # Preprocess the image
     image = Image.open(image_path)
     rmbg_remover = RMBGRemover()
-    image = rmbg_remover(image, height=1024, width=1024)
+    image = rmbg_remover(image, height=args.resolution, width=args.resolution)
 
     processed_image_name = os.path.basename(image_path).split('.')[0] + '_input.png'
     image.save(os.path.join(args.output_dir, processed_image_name))
@@ -45,12 +45,20 @@ def run(args):
 
     mc_algo = 'mc' if args.device in ['cpu', 'mps'] else args.mc_algo
 
-    if args.fast:
+    if args.geo_model == 'hunyuan3d-dit-v2-0-turbo':
         mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
             'tencent/Hunyuan3D-2',
             use_safetensors=True,
             subfolder='hunyuan3d-dit-v2-0-turbo',
             variant='fp16'
+        )
+    elif args.geo_model == 'hunyuan3d-dit-v2-mini-turbo':
+        mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
+            'tencent/Hunyuan3D-2mini',
+            use_safetensors=True,
+            subfolder='hunyuan3d-dit-v2-mini-turbo',
+            variant='fp16',
+            config_path='./configs/hunyuan3d-dit-v2-mini-turbo.yaml'
         )
     else:
         mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
@@ -117,9 +125,9 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, default=0, help='Seed for the random number generator')
     parser.add_argument('--steps', type=int, default=30, help='Number of inference steps')
     parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--fast', action='store_true', help='Use fast mode', default=False)
+    parser.add_argument('--geo_model', type=str, default='hunyuan3d-dit-v2-0')
     parser.add_argument('--mc_algo', type=str, default='dmc')
-    parser.add_argument('--remesh_method', type=str, help='Re-mesh method. Must be either "im" or "bpt" if used.',
+    parser.add_argument('--remesh_method', type=str, help='Re-mesh method. Must be either "im", "bpt" or "deepmesh" if used.',
                         default=None)
     parser.add_argument('--unwrap_method', type=str,
                         help='UV unwrap method. Must be either "xatlas", "open3d" or "bpy"', default='xatlas')
@@ -127,6 +135,7 @@ if __name__ == "__main__":
     parser.add_argument('--texture', action='store_true', help='Texture the mesh', default=False)
     parser.add_argument('--mv_model', type=str, default='hunyuan3d-paint-v2-0', help='Multiview model to use')
     parser.add_argument('--low_vram_mode', action='store_true')
+    parser.add_argument('--resolution', type=int, default=1024, help='Input image resolution (height and width)')
 
     args = parser.parse_args()
 

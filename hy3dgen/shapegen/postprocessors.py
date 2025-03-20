@@ -140,8 +140,13 @@ class FaceReducer:
             mesh = trimesh.Trimesh(vertices, faces)
             mesh = trimesh.smoothing.filter_laplacian(mesh)
         elif remesh_method is not None and remesh_method == "bpt":
-            mesh = self.bpt_remesh(mesh)
-
+            from .bpt.pipeline import BPTPipeline
+            pipeline = BPTPipeline.from_pretrained()
+            mesh = pipeline(mesh)
+        elif remesh_method is not None and remesh_method == "deepmesh":
+            from .DeepMesh.pipeline import DeepMeshPipeline
+            pipeline = DeepMeshPipeline.from_pretrained()
+            mesh = pipeline(mesh)
         if len(mesh.faces) > max_facenum:
             ms = import_mesh(mesh)
             ms = reduce_face(ms, max_facenum=max_facenum)
@@ -151,66 +156,6 @@ class FaceReducer:
         print(f"Resulting mesh has {len(mesh.faces)} faces")
 
         return mesh
-
-    def bpt_remesh(self, mesh: trimesh.Trimesh, verbose: bool = False):
-        from .bpt.model import data_utils
-        from .bpt.model.model import MeshTransformer
-        from .bpt.model.serializaiton import BPT_deserialize
-        from .bpt.utils import sample_pc, joint_filter
-
-        pc_normal = sample_pc(mesh, pc_num=8192, with_normal=True)
-
-        pc_normal = pc_normal[None, :, :] if len(pc_normal.shape) == 2 else pc_normal
-
-        from torch.serialization import add_safe_globals
-        from deepspeed.runtime.fp16.loss_scaler import LossScaler
-        from deepspeed.runtime.zero.config import ZeroStageEnum
-        from deepspeed.utils.tensor_fragment import fragment_address
-
-        add_safe_globals([LossScaler, fragment_address, ZeroStageEnum])
-
-        model = MeshTransformer()
-        model.load('./weights/bpt-8-16-500m.pt')
-        model = model.eval()
-        model = model.half()
-        model = model.cuda()
-
-        pc_tensor = torch.from_numpy(pc_normal).cuda().half()
-        if len(pc_tensor.shape) == 2:
-            pc_tensor = pc_tensor.unsqueeze(0)
-
-        codes = model.generate(
-            pc=pc_tensor,
-            filter_logits_fn=joint_filter,
-            filter_kwargs=dict(k=50, p=0.95),
-            return_codes=True,
-        )
-
-        coords = []
-        try:
-            for i in range(len(codes)):
-                code = codes[i]
-                code = code[code != model.pad_id].cpu().numpy()
-                vertices = BPT_deserialize(
-                    code,
-                    block_size=model.block_size,
-                    offset_size=model.offset_size,
-                    use_special_block=model.use_special_block,
-                )
-                coords.append(vertices)
-        except:
-            coords.append(np.zeros(3, 3))
-
-        # convert coordinates to mesh
-        vertices = coords[0]
-        faces = torch.arange(1, len(vertices) + 1).view(-1, 3)
-
-        # Move to CPU
-        faces = faces.cpu().numpy()
-
-        del model
-
-        return data_utils.to_mesh(vertices, faces, transpose=False, post_process=True)
 
     @staticmethod
     def quads_to_triangles(quads):
