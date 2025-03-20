@@ -489,7 +489,7 @@ def build_app():
                             enhance_texture = gr.Checkbox(label='Enhance Texture Angles', value=False)
                             pbr = gr.Checkbox(label='PBR Texture (Experimental, use the README in folder)', value=False)
 
-                        remesh_method = gr.Radio(['InstantMeshes', 'BPT', 'DeepMesh' 'None'], label='Remesh Method', value='None')
+                        remesh_method = gr.Radio(['InstantMeshes', 'BPT', 'DeepMesh', 'None'], label='Remesh Method', value='None')
                         uv_unwrap_method = gr.Radio(['xatlas', 'open3d', 'bpy'], label='UV Unwrap Method',
                                                     value='xatlas')
                         super_resolution = gr.Radio(['None', 'Aura', 'InvSR', 'Flux', 'SD-Upscaler'],
