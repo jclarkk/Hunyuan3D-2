@@ -354,7 +354,7 @@ class Hunyuan3DPaintPipeline:
                     if debug:
                         rgb_img.save(f'debug_multiview_{i}_upscaled.png')
 
-                rgb_img = rgb_img.resize((self.config.render_size, self.config.render_size))
+                rgb_img = rgb_img.resize((self.config.texture_size, self.config.texture_size))
 
                 new_multiviews.append(rgb_img)
 
@@ -368,8 +368,7 @@ class Hunyuan3DPaintPipeline:
         else:
             for i in range(len(multiviews)):
                 multiviews[i] = multiviews[i].resize(
-                    (self.config.render_size, self.config.render_size))
-
+                    (self.config.texture_size, self.config.texture_size))
                 if debug:
                     multiviews[i].save(f'debug_multiview_{i}.png')
 
@@ -393,12 +392,12 @@ class Hunyuan3DPaintPipeline:
                 self.generate_pbr_for_batch(pbr_pipeline, pre_pbr_multiviews))
 
             for i in range(len(albedo_multiviews)):
-                albedo_multiviews[i] = albedo_multiviews[i].resize((self.config.render_size, self.config.render_size))
-                normal_multiviews[i] = normal_multiviews[i].resize((self.config.render_size, self.config.render_size))
+                albedo_multiviews[i] = albedo_multiviews[i].resize((self.config.texture_size, self.config.texture_size))
+                normal_multiviews[i] = normal_multiviews[i].resize((self.config.texture_size, self.config.texture_size))
                 roughness_multiviews[i] = roughness_multiviews[i].resize(
-                    (self.config.render_size, self.config.render_size))
+                    (self.config.texture_size, self.config.texture_size))
                 metallic_multiviews[i] = metallic_multiviews[i].resize(
-                    (self.config.render_size, self.config.render_size))
+                    (self.config.texture_size, self.config.texture_size))
 
                 if debug:
                     albedo_multiviews[i].save(f'debug_albedo_multiview_{i}.png')

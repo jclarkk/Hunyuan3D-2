@@ -196,6 +196,7 @@ class Hunyuan3DDiTPipeline:
     def from_pretrained(
         cls,
         model_path,
+        config_path=None,
         device='cuda',
         dtype=torch.float16,
         use_safetensors=True,
@@ -211,12 +212,20 @@ class Hunyuan3DDiTPipeline:
             dtype=dtype,
             device=device,
         )
-        config_path, ckpt_path = smart_load_model(
-            model_path,
-            subfolder=subfolder,
-            use_safetensors=use_safetensors,
-            variant=variant
-        )
+        if config_path is None:
+            config_path, ckpt_path = smart_load_model(
+                model_path,
+                subfolder=subfolder,
+                use_safetensors=use_safetensors,
+                variant=variant
+            )
+        else:
+            _, ckpt_path = smart_load_model(
+                model_path,
+                subfolder=subfolder,
+                use_safetensors=use_safetensors,
+                variant=variant
+            )
         return cls.from_single_file(
             ckpt_path,
             config_path,

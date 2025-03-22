@@ -45,6 +45,7 @@ def run(args):
 
     mc_algo = 'mc' if args.device in ['cpu', 'mps'] else args.mc_algo
 
+    steps = args.steps
     if args.geo_model == 'hunyuan3d-dit-v2-0-turbo':
         mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
             'tencent/Hunyuan3D-2',
@@ -55,11 +56,12 @@ def run(args):
     elif args.geo_model == 'hunyuan3d-dit-v2-mini-turbo':
         mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
             'tencent/Hunyuan3D-2mini',
+            config_path='./configs/hunyuan3d-dit-v2-mini-turbo.yaml',
             use_safetensors=True,
             subfolder='hunyuan3d-dit-v2-mini-turbo',
-            variant='fp16',
-            config_path='./configs/hunyuan3d-dit-v2-mini-turbo.yaml'
+            variant='fp16'
         )
+        steps = 10
     else:
         mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
             'tencent/Hunyuan3D-2',
@@ -72,8 +74,9 @@ def run(args):
 
     # Generate mesh
     mesh = mesh_pipeline(image=image,
-                         num_inference_steps=args.steps,
+                         num_inference_steps=steps,
                          octree_resolution=512,
+                         mc_level=512,
                          generator=torch.manual_seed(args.seed))[0]
     t3 = time.time()
     print(f"Mesh generation took {t3 - t2:.2f} seconds")

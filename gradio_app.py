@@ -133,20 +133,20 @@ def build_model_viewer_html(save_folder, height=660, width=790, textured=False):
 
 
 def _gen_shape(
-    caption=None,
-    image=None,
-    mv_image_front=None,
-    mv_image_back=None,
-    mv_image_left=None,
-    mv_image_right=None,
-    steps=50,
-    guidance_scale=7.5,
-    seed=1234,
-    octree_resolution=256,
-    check_box_rembg=False,
-    num_chunks=200000,
-    randomize_seed: bool = False,
-    remesh_method='None'
+        caption=None,
+        image=None,
+        mv_image_front=None,
+        mv_image_back=None,
+        mv_image_left=None,
+        mv_image_right=None,
+        steps=50,
+        guidance_scale=7.5,
+        seed=1234,
+        octree_resolution=256,
+        check_box_rembg=False,
+        num_chunks=200000,
+        randomize_seed: bool = False,
+        remesh_method='None'
 ):
     if not MV_MODE and image is None and caption is None:
         raise gr.Error("Please provide either a caption or an image.")
@@ -256,25 +256,25 @@ def _gen_shape(
 
 
 def generation_all(
-    caption=None,
-    image=None,
-    mv_image_front=None,
-    mv_image_back=None,
-    mv_image_left=None,
-    mv_image_right=None,
-    steps=50,
-    guidance_scale=7.5,
-    seed=1234,
-    octree_resolution=256,
-    check_box_rembg=False,
-    num_chunks=200000,
-    randomize_seed: bool = False,
-    remesh_method='None',
-    uv_unwrap_method='xatlas',
-    upscale_model='Aura',
-    enhance_texture_angles=False,
-    pbr=False,
-    texture_size=1024
+        caption=None,
+        image=None,
+        mv_image_front=None,
+        mv_image_back=None,
+        mv_image_left=None,
+        mv_image_right=None,
+        steps=50,
+        guidance_scale=7.5,
+        seed=1234,
+        octree_resolution=256,
+        check_box_rembg=False,
+        num_chunks=200000,
+        randomize_seed: bool = False,
+        remesh_method='None',
+        uv_unwrap_method='xatlas',
+        upscale_model='Aura',
+        enhance_texture_angles=False,
+        pbr=False,
+        texture_size=1024
 ):
     original_image = image.copy()
 
@@ -327,20 +327,20 @@ def generation_all(
 
 
 def shape_generation(
-    caption=None,
-    image=None,
-    mv_image_front=None,
-    mv_image_back=None,
-    mv_image_left=None,
-    mv_image_right=None,
-    steps=50,
-    guidance_scale=7.5,
-    seed=1234,
-    octree_resolution=256,
-    check_box_rembg=False,
-    num_chunks=200000,
-    randomize_seed: bool = False,
-    remesh_method='None'
+        caption=None,
+        image=None,
+        mv_image_front=None,
+        mv_image_back=None,
+        mv_image_left=None,
+        mv_image_right=None,
+        steps=50,
+        guidance_scale=7.5,
+        seed=1234,
+        octree_resolution=256,
+        check_box_rembg=False,
+        num_chunks=200000,
+        randomize_seed: bool = False,
+        remesh_method='None'
 ):
     start_time_0 = time.time()
     mesh, image, save_folder, stats, seed = _gen_shape(
@@ -487,7 +487,8 @@ def build_app():
                             enhance_texture = gr.Checkbox(label='Enhance Texture Angles', value=False)
                             pbr = gr.Checkbox(label='PBR Texture (Experimental, use the README in folder)', value=False)
 
-                        remesh_method = gr.Radio(['InstantMeshes', 'BPT', 'DeepMesh', 'None'], label='Remesh Method', value='None')
+                        remesh_method = gr.Radio(['InstantMeshes', 'BPT', 'DeepMesh', 'None'], label='Remesh Method',
+                                                 value='None')
                         uv_unwrap_method = gr.Radio(['xatlas', 'open3d', 'bpy'], label='UV Unwrap Method',
                                                     value='xatlas')
                         super_resolution = gr.Radio(['None', 'Aura', 'RealESRGAN', 'InvSR', 'Flux', 'SD-Upscaler'],
@@ -739,7 +740,8 @@ if __name__ == '__main__':
         try:
             from hy3dgen.texgen import Hunyuan3DPaintPipeline
 
-            texgen_worker = Hunyuan3DPaintPipeline.from_pretrained(args.texgen_model_path, mv_model=args.mv_model, use_delight=args.use_delight)
+            texgen_worker = Hunyuan3DPaintPipeline.from_pretrained(args.texgen_model_path, mv_model=args.mv_model,
+                                                                   use_delight=args.use_delight)
             if args.low_vram_mode:
                 texgen_worker.enable_model_cpu_offload()
                 if 'hunyuan3d-paint' in args.mv_model:
@@ -767,8 +769,7 @@ if __name__ == '__main__':
         t2i_worker = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled')
         HAS_T2I = True
 
-    from hy3dgen.shapegen import FaceReducer, FloaterRemover, DegenerateFaceRemover, MeshSimplifier, \
-        Hunyuan3DDiTFlowMatchingPipeline
+    from hy3dgen.shapegen import FaceReducer, FloaterRemover, DegenerateFaceRemover, Hunyuan3DDiTFlowMatchingPipeline
     from hy3dgen.shapegen.pipelines import export_to_trimesh
     from hy3dgen.rembg import BackgroundRemover
 
