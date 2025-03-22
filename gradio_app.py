@@ -482,7 +482,7 @@ def build_app():
                             num_chunks = gr.Slider(maximum=5000000, minimum=1000, value=8000,
                                                    label='Number of Chunks', min_width=100)
                         with gr.Row():
-                            texture_size = gr.Slider(minimum=1024, maximum=3072, step=1024, value=2048,
+                            texture_size = gr.Slider(minimum=1024, maximum=4096, step=1024, value=2048,
                                                      label='Texture Resolution')
                             enhance_texture = gr.Checkbox(label='Enhance Texture Angles', value=False)
                             pbr = gr.Checkbox(label='PBR Texture (Experimental, use the README in folder)', value=False)
@@ -742,10 +742,11 @@ if __name__ == '__main__':
             texgen_worker = Hunyuan3DPaintPipeline.from_pretrained(args.texgen_model_path, mv_model=args.mv_model, use_delight=args.use_delight)
             if args.low_vram_mode:
                 texgen_worker.enable_model_cpu_offload()
-                texgen_worker.models["multiview_model"].pipeline.vae.use_slicing = True
-                texgen_worker.models["multiview_model"].pipeline.enable_attention_slicing()
-                texgen_worker.models["multiview_model"].pipeline.enable_vae_slicing()
-                texgen_worker.models["multiview_model"].pipeline.enable_vae_tiling()
+                if 'hunyuan3d-paint' in args.mv_model:
+                    texgen_worker.models["multiview_model"].pipeline.vae.use_slicing = True
+                    texgen_worker.models["multiview_model"].pipeline.enable_attention_slicing()
+                    texgen_worker.models["multiview_model"].pipeline.enable_vae_slicing()
+                    texgen_worker.models["multiview_model"].pipeline.enable_vae_tiling()
             # Not help much, ignore for now.
             # if args.compile:
             #     texgen_worker.models['delight_model'].pipeline.unet.compile()

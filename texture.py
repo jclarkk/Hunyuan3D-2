@@ -26,8 +26,8 @@ def run(args):
     if args.remesh_method not in [None, 'im', 'bpt', 'None']:
         raise ValueError("Re-mesh type must be either 'im' or 'bpt'")
 
-    if args.texture_size not in [1024, 2048, 3072]:
-        raise ValueError("Texture size must be either 1024 or 2048")
+    if args.texture_size not in [1024, 2048, 3072, 4096]:
+        raise ValueError("Texture size must be one of 1024, 2048, 3072, 4096")
 
     if args.unwrap_method not in ['xatlas', 'open3d', 'bpy']:
         raise ValueError("Unwrap method must be either 'xatlas', 'open3d' or 'bpy'")
