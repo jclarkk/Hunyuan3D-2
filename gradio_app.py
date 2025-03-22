@@ -245,7 +245,7 @@ def _gen_shape(
     mesh = degenerate_face_remove_worker(mesh)
     mesh = face_reduce_worker(mesh, remesh_method=remesh_method)
     logger.info("---Face Reduction takes %s seconds ---" % (time.time() - fr_time))
-    stats['time']['face reduction'] = time.time() - fr_time
+    time_meta['face reduction'] = time.time() - fr_time
 
     stats['number_of_faces'] = mesh.faces.shape[0]
     stats['number_of_vertices'] = mesh.vertices.shape[0]
