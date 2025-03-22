@@ -19,7 +19,7 @@ class MVAdapterPipelineWrapper:
     """
 
     @classmethod
-    def from_pretrained(cls, base_model: str = "stabilityai/stable-diffusion-xl-base-1.0", device: str = "cuda"):
+    def from_pretrained(cls, base_model: str = "lykon/dreamshaper-xl-v2-turbo", device: str = "cuda"):
         """
         Initialize the MV-Adapter pipeline from pretrained weights without specifying num_views.
         """
@@ -192,7 +192,7 @@ class MVAdapterPipelineWrapper:
                  seed: int = 42,
                  height: int = 768,
                  width: int = 768,
-                 num_inference_steps: int = 50,
+                 num_inference_steps: int = 16,
                  guidance_scale: float = 3.0,
                  reference_conditioning_scale: float = 1.0,
                  control_conditioning_scale: float = 1.0,

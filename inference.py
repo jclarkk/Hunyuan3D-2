@@ -91,7 +91,9 @@ def run(args):
         # Reload image to use maximum possible resolution for texture model
         image = Image.open(image_path)
         t5 = time.time()
-        texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2', mv_model=args.mv_model)
+        texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2',
+                                                                  mv_model=args.mv_model,
+                                                                  use_delight=args.use_delight)
         if args.low_vram_mode:
             texture_pipeline.enable_model_cpu_offload()
             texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
@@ -127,12 +129,14 @@ if __name__ == "__main__":
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--geo_model', type=str, default='hunyuan3d-dit-v2-0')
     parser.add_argument('--mc_algo', type=str, default='dmc')
-    parser.add_argument('--remesh_method', type=str, help='Re-mesh method. Must be either "im", "bpt" or "deepmesh" if used.',
+    parser.add_argument('--remesh_method', type=str,
+                        help='Re-mesh method. Must be either "im", "bpt" or "deepmesh" if used.',
                         default=None)
     parser.add_argument('--unwrap_method', type=str,
                         help='UV unwrap method. Must be either "xatlas", "open3d" or "bpy"', default='xatlas')
     parser.add_argument('--face_count', type=int, default=100000, help='Maximum face count for the mesh')
     parser.add_argument('--texture', action='store_true', help='Texture the mesh', default=False)
+    parser.add_argument('--use_delight', action='store_true', help='Use Delight model', default=False)
     parser.add_argument('--mv_model', type=str, default='hunyuan3d-paint-v2-0', help='Multiview model to use')
     parser.add_argument('--low_vram_mode', action='store_true')
     parser.add_argument('--resolution', type=int, default=1024, help='Input image resolution (height and width)')

@@ -1,7 +1,7 @@
 beartype==0.19.0
 lightning==2.1.2
 lightning-utilities==0.11.9
-flash-attn==2.7.0.post2
+flash-attn==2.7.1.post4
 
 git+https://github.com/HazyResearch/flash-attention.git#subdirectory=csrc/rotary
 git+https://github.com/HazyResearch/flash-attention.git#subdirectory=csrc/layer_norm

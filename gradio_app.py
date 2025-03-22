@@ -240,9 +240,12 @@ def _gen_shape(
     elif remesh_method == 'DeepMesh':
         remesh_method = 'deepmesh'
 
-    mesh = FloaterRemover()(mesh)
-    mesh = DegenerateFaceRemover()(mesh)
-    mesh = FaceReducer()(mesh, remesh_method=remesh_method)
+    fr_time = time.time()
+    mesh = floater_remove_worker(mesh)
+    mesh = degenerate_face_remove_worker(mesh)
+    mesh = face_reduce_worker(mesh, remesh_method=remesh_method)
+    logger.info("---Face Reduction takes %s seconds ---" % (time.time() - fr_time))
+    stats['time']['face reduction'] = time.time() - fr_time
 
     stats['number_of_faces'] = mesh.faces.shape[0]
     stats['number_of_vertices'] = mesh.vertices.shape[0]
@@ -293,11 +296,6 @@ def generation_all(
         remesh_method=remesh_method
     )
     path = export_mesh(mesh, save_folder, textured=False)
-
-    tmp_time = time.time()
-    mesh = face_reduce_worker(mesh)
-    logger.info("---Face Reduction takes %s seconds ---" % (time.time() - tmp_time))
-    stats['time']['face reduction'] = time.time() - tmp_time
 
     tmp_time = time.time()
     textured_mesh = texgen_worker(
@@ -741,9 +739,13 @@ if __name__ == '__main__':
         try:
             from hy3dgen.texgen import Hunyuan3DPaintPipeline
 
-            texgen_worker = Hunyuan3DPaintPipeline.from_pretrained(args.texgen_model_path, mv_model=args.mv_model)
+            texgen_worker = Hunyuan3DPaintPipeline.from_pretrained(args.texgen_model_path, mv_model=args.mv_model, use_delight=args.use_delight)
             if args.low_vram_mode:
                 texgen_worker.enable_model_cpu_offload()
+                texgen_worker.models["multiview_model"].pipeline.vae.use_slicing = True
+                texgen_worker.models["multiview_model"].pipeline.enable_attention_slicing()
+                texgen_worker.models["multiview_model"].pipeline.enable_vae_slicing()
+                texgen_worker.models["multiview_model"].pipeline.enable_vae_tiling()
             # Not help much, ignore for now.
             # if args.compile:
             #     texgen_worker.models['delight_model'].pipeline.unet.compile()
