@@ -315,8 +315,8 @@ def generation_all(
     path_textured = export_mesh(textured_mesh, save_folder, textured=True)
     model_viewer_html_textured = build_model_viewer_html(save_folder, height=HTML_HEIGHT, width=HTML_WIDTH,
                                                          textured=True)
-    if args.low_vram_mode:
-        torch.cuda.empty_cache()
+    torch.cuda.empty_cache()
+
     return (
         gr.update(value=path),
         gr.update(value=path_textured),
@@ -490,7 +490,7 @@ def build_app():
                         remesh_method = gr.Radio(['InstantMeshes', 'BPT', 'DeepMesh', 'None'], label='Remesh Method', value='None')
                         uv_unwrap_method = gr.Radio(['xatlas', 'open3d', 'bpy'], label='UV Unwrap Method',
                                                     value='xatlas')
-                        super_resolution = gr.Radio(['None', 'Aura', 'InvSR', 'Flux', 'SD-Upscaler'],
+                        super_resolution = gr.Radio(['None', 'Aura', 'RealESRGAN', 'InvSR', 'Flux', 'SD-Upscaler'],
                                                     label='Super-Resolution (Install the method required, use README in folder)',
                                                     value='None')
                     with gr.Tab("Export", id='tab_export'):

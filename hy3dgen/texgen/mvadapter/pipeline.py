@@ -190,8 +190,8 @@ class MVAdapterPipelineWrapper:
                  camera_info: List[int] = None,
                  num_views: int = 6,
                  seed: int = 42,
-                 height: int = 768,
-                 width: int = 768,
+                 height: int = 1024,
+                 width: int = 1024,
                  num_inference_steps: int = 16,
                  guidance_scale: float = 3.0,
                  reference_conditioning_scale: float = 1.0,
@@ -200,6 +200,7 @@ class MVAdapterPipelineWrapper:
                  negative_prompt: str = "watermark, ugly, deformed, noisy, blurry, low contrast",
                  use_mesh_renderer: bool = False,
                  lora_scale: float = 1.0,
+                 batch_size: int = 6,
                  save_debug_images: bool = False):
         """
         Generate multi-view images using the MV-Adapter pipeline.
@@ -282,30 +283,37 @@ class MVAdapterPipelineWrapper:
 
         generator = torch.Generator(device=self.device).manual_seed(seed) if seed != -1 else None
 
-        # Run the pipeline
-        output = self.pipeline(
-            prompt,
-            height=height,
-            width=width,
-            num_inference_steps=num_inference_steps,
-            guidance_scale=guidance_scale,
-            num_images_per_prompt=num_views,
-            control_image=control_images,
-            control_conditioning_scale=control_conditioning_scale,
-            reference_image=reference_image,
-            reference_conditioning_scale=reference_conditioning_scale,
-            negative_prompt=negative_prompt,
-            generator=generator,
-            cross_attention_kwargs={"scale": lora_scale},
-        )
+        # Process in batches
+        generator = torch.Generator(device=self.device).manual_seed(seed) if seed != -1 else None
+        all_images = []
 
-        images = output.images
+        for batch_start in range(0, num_views, batch_size):
+            batch_end = min(batch_start + batch_size, num_views)
+            current_num_views = batch_end - batch_start
+            batch_control_images = control_images[batch_start:batch_end]
+
+            output = self.pipeline(
+                prompt,
+                height=height,
+                width=width,
+                num_inference_steps=num_inference_steps,
+                guidance_scale=guidance_scale,
+                num_images_per_prompt=current_num_views,
+                control_image=batch_control_images,
+                control_conditioning_scale=control_conditioning_scale,
+                reference_image=reference_image,
+                reference_conditioning_scale=reference_conditioning_scale,
+                negative_prompt=negative_prompt,
+                generator=generator,
+                cross_attention_kwargs={"scale": lora_scale},
+            )
+            all_images.extend(output.images)
 
         if save_debug_images:
             import os
             debug_dir = "debug_output_images"
             os.makedirs(debug_dir, exist_ok=True)
-            for i, img in enumerate(images):
+            for i, img in enumerate(all_images):
                 img.save(os.path.join(debug_dir, f"output_image_{i}.png"))
 
-        return images
+        return all_images

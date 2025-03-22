@@ -16,15 +16,16 @@
 import logging
 import os
 import time
+from typing import Union, Optional
 
 import numpy as np
 import torch
 from PIL import Image
-from typing import Union, Optional
 
 from .differentiable_renderer.mesh_render import MeshRender
 from .mvadapter.pipeline import MVAdapterPipelineWrapper
-from .upscalers.pipelines import AuraSRUpscalerPipeline, InvSRUpscalerPipeline, FluxUpscalerPipeline
+from .upscalers.pipelines import AuraSRUpscalerPipeline, InvSRUpscalerPipeline, FluxUpscalerPipeline, \
+    RealESRGANUpscalerPipeline
 from .utils.dehighlight_utils import Light_Shadow_Remover
 from .utils.imagesuper_utils import Image_Super_Net
 from .utils.multiview_utils import Multiview_Diffusion_Net
@@ -67,7 +68,7 @@ class Hunyuan3DPaintPipeline:
             model_path = os.path.expanduser(os.path.join(base_dir, model_path))
 
             delight_model_path = os.path.join(model_path, 'hunyuan3d-delight-v2-0')
-            multiview_model_path = os.path.join(model_path, 'hunyuan3d-paint-v2-0')
+            multiview_model_path = os.path.join(model_path, 'hunyuan3d-paint-v2-0-turbo')
 
             if not os.path.exists(delight_model_path) or not os.path.exists(multiview_model_path):
                 try:
@@ -75,7 +76,7 @@ class Hunyuan3DPaintPipeline:
                     # download from huggingface
                     model_path = huggingface_hub.snapshot_download(repo_id=original_model_path)
                     delight_model_path = os.path.join(model_path, 'hunyuan3d-delight-v2-0')
-                    multiview_model_path = os.path.join(model_path, 'hunyuan3d-paint-v2-0')
+                    multiview_model_path = os.path.join(model_path, 'hunyuan3d-paint-v2-0-turbo')
                     return cls(Hunyuan3DTexGenConfig(delight_model_path, multiview_model_path,
                                                      mv_model=mv_model, use_delight=use_delight))
                 except ImportError:
@@ -326,6 +327,8 @@ class Hunyuan3DPaintPipeline:
 
         if upscale_model == 'Aura':
             upscaler = AuraSRUpscalerPipeline.from_pretrained()
+        elif upscale_model == 'RealESRGAN':
+            upscaler = RealESRGANUpscalerPipeline.from_pretrained(self.config.device)
         elif upscale_model == 'InvSR':
             upscaler = InvSRUpscalerPipeline.from_pretrained(self.config.device)
         elif upscale_model == 'Flux':
@@ -389,16 +392,6 @@ class Hunyuan3DPaintPipeline:
             albedo_multiviews, metallic_multiviews, normal_multiviews, roughness_multiviews = (
                 self.generate_pbr_for_batch(pbr_pipeline, pre_pbr_multiviews))
 
-            if enhance_texture_angles:
-                pre_pbr_multiviews = [view.resize((1024, 1024)) for view in multiviews[6:]]
-                albedo_multiviews_enhanced, metallic_multiviews_enhanced, normal_multiviews_enhanced, roughness_multiviews_enhanced = (
-                    self.generate_pbr_for_batch(pbr_pipeline, pre_pbr_multiviews))
-
-                albedo_multiviews.extend(albedo_multiviews_enhanced)
-                normal_multiviews.extend(normal_multiviews_enhanced)
-                metallic_multiviews.extend(metallic_multiviews_enhanced)
-                roughness_multiviews.extend(roughness_multiviews_enhanced)
-
             for i in range(len(albedo_multiviews)):
                 albedo_multiviews[i] = albedo_multiviews[i].resize((self.config.render_size, self.config.render_size))
                 normal_multiviews[i] = normal_multiviews[i].resize((self.config.render_size, self.config.render_size))
@@ -413,36 +406,20 @@ class Hunyuan3DPaintPipeline:
                     roughness_multiviews[i].save(f'debug_roughness_multiview_{i}.png')
                     metallic_multiviews[i].save(f'debug_metallic_multiview_{i}.png')
 
-            # print('Baking albedo PBR texture...')
-            # texture, mask = self.bake_from_multiview(albedo_multiviews,
-            #                                          selected_camera_elevs,
-            #                                          selected_camera_azims,
-            #                                          selected_view_weights,
-            #                                          method=self.config.merge_method)
-
-            # For some reason the normal texture is creating artifacts so we won't use it at the moment
             normal_texture = None
-            # print('Baking normal PBR texture...')
-            # normal_texture, _ = self.bake_from_multiview(normal_multiviews,
-            #                                              selected_camera_elevs,
-            #                                              selected_camera_azims,
-            #                                              selected_view_weights,
-            #                                              method=self.config.merge_method)
-            # normal_texture = normal_texture.squeeze(0)
-            # normal_texture_np = normal_texture.cpu().numpy()
-            # normal_texture = Image.fromarray((normal_texture_np * 255).astype(np.uint8))
+
             print('Baking roughness PBR texture...')
             roughness_texture, _ = self.bake_from_multiview(roughness_multiviews,
-                                                            selected_camera_elevs,
-                                                            selected_camera_azims,
-                                                            selected_view_weights,
+                                                            self.config.candidate_camera_elevs,
+                                                            self.config.candidate_camera_azims,
+                                                            self.config.candidate_view_weights,
                                                             method=self.config.merge_method)
             roughness_texture = roughness_texture.cpu().numpy()
             print('Baking metallic PBR texture...')
             metallic_texture, _ = self.bake_from_multiview(metallic_multiviews,
-                                                           selected_camera_elevs,
-                                                           selected_camera_azims,
-                                                           selected_view_weights,
+                                                           self.config.candidate_camera_elevs,
+                                                           self.config.candidate_camera_azims,
+                                                           self.config.candidate_view_weights,
                                                            method=self.config.merge_method)
             metallic_texture = metallic_texture.cpu().numpy()
             metallic_roughness_texture = pbr_pipeline.combine_roughness_metalness(

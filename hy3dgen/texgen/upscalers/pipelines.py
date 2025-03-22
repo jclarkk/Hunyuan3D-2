@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 from PIL import Image
 
@@ -70,6 +71,34 @@ class InvSRUpscalerPipeline:
         from .InvSR.sampler_invsr import process_image, pil_to_tensor
         input_tensor = pil_to_tensor(input_image)
         return process_image(self.sampler, input_tensor)
+
+
+class RealESRGANUpscalerPipeline:
+    """
+        High quality upscaling with good performance using Real-ESRGAN
+    """
+
+    @classmethod
+    def from_pretrained(cls, device):
+        from realesrgan import RealESRGAN
+        # Initialize Real-ESRGAN with 4x upscaling model
+        model = RealESRGAN(device=device, scale=4)
+        model.load_weights('weights/RealESRGAN_x4plus.pth', download=True)
+        return cls(model, device)
+
+    def __init__(self, model, device):
+        self.model = model
+        self.device = device
+
+    def __call__(self, input_image: Image.Image) -> Image.Image:
+        # Convert PIL Image to numpy array
+        input_array = np.array(input_image)
+
+        # Perform upscaling
+        upscaled_array = self.model.predict(input_array)
+
+        # Convert back to PIL Image
+        return Image.fromarray(upscaled_array)
 
 
 class AuraSRUpscalerPipeline:
