@@ -68,7 +68,7 @@ class Hunyuan3DPaintPipeline:
             model_path = os.path.expanduser(os.path.join(base_dir, model_path))
 
             delight_model_path = os.path.join(model_path, 'hunyuan3d-delight-v2-0')
-            multiview_model_path = os.path.join(model_path, 'hunyuan3d-paint-v2-0-turbo')
+            multiview_model_path = os.path.join(model_path, mv_model)
 
             if not os.path.exists(delight_model_path) or not os.path.exists(multiview_model_path):
                 try:
@@ -76,7 +76,7 @@ class Hunyuan3DPaintPipeline:
                     # download from huggingface
                     model_path = huggingface_hub.snapshot_download(repo_id=original_model_path)
                     delight_model_path = os.path.join(model_path, 'hunyuan3d-delight-v2-0')
-                    multiview_model_path = os.path.join(model_path, 'hunyuan3d-paint-v2-0-turbo')
+                    multiview_model_path = os.path.join(model_path, mv_model)
                     return cls(Hunyuan3DTexGenConfig(delight_model_path, multiview_model_path,
                                                      mv_model=mv_model, use_delight=use_delight))
                 except ImportError:
@@ -107,7 +107,7 @@ class Hunyuan3DPaintPipeline:
             self.models['delight_model'] = Light_Shadow_Remover(self.config)
             print('Delight model loaded')
         print(f'Loading multiview model: {self.config.mv_model}')
-        if self.config.mv_model == 'hunyuan3d-paint-v2-0':
+        if self.config.mv_model == 'hunyuan3d-paint-v2-0' or self.config.mv_model == 'hunyuan3d-paint-v2-0-turbo':
             self.models['multiview_model'] = Multiview_Diffusion_Net(self.config)
         elif self.config.mv_model == 'mv-adapter':
             self.models['multiview_model'] = MVAdapterPipelineWrapper.from_pretrained(device=self.config.device)
