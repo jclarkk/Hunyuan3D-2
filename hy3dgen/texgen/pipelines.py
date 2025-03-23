@@ -70,7 +70,7 @@ class Hunyuan3DPaintPipeline:
             delight_model_path = os.path.join(model_path, 'hunyuan3d-delight-v2-0')
             multiview_model_path = os.path.join(model_path, mv_model)
 
-            if not os.path.exists(multiview_model_path):
+            if 'hunyuan3d' in mv_model and not os.path.exists(multiview_model_path):
                 try:
                     import huggingface_hub
                     # download from huggingface
