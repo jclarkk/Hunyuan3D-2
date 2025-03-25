@@ -17,7 +17,7 @@ class BPTPipeline:
     @classmethod
     def from_pretrained(cls):
         model = MeshTransformer()
-        model.load('./weights/bpt-8-16-500m.pt')
+        model.load('./weights/bpt-8-16-500m.pt', weights_only=False)
         model = model.eval()
         model = model.half()
         model = model.cuda()
