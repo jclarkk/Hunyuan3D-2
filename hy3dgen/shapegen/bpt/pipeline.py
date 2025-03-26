@@ -16,8 +16,10 @@ class BPTPipeline:
 
     @classmethod
     def from_pretrained(cls):
+        add_safe_globals([LossScaler, fragment_address, ZeroStageEnum])
+
         model = MeshTransformer()
-        model.load('./weights/bpt-8-16-500m.pt', weights_only=False)
+        model.load('./weights/bpt-8-16-500m.pt')
         model = model.eval()
         model = model.half()
         model = model.cuda()
@@ -31,8 +33,6 @@ class BPTPipeline:
         # Convert mesh to point cloud
         pc_normal = sample_pc(mesh, pc_num=8192, with_normal=True)
         pc_normal = pc_normal[None, :, :] if len(pc_normal.shape) == 2 else pc_normal
-
-        add_safe_globals([LossScaler, fragment_address, ZeroStageEnum])
 
         pc_tensor = torch.from_numpy(pc_normal).cuda().half()
         if len(pc_tensor.shape) == 2:

@@ -26,6 +26,152 @@ from .models.autoencoders import Latent2MeshOutput
 from .utils import synchronize_timer
 
 
+def remesh_with_meshlib(mesh: trimesh.Trimesh):
+    import meshlib.mrmeshpy as mrmeshpy
+    import meshlib.mrmeshnumpy as mrmeshnumpy
+    import numpy as np
+    import random
+
+    # Load mesh
+    mesh = mrmeshnumpy.meshFromFacesVerts(mesh.faces, mesh.vertices)
+    topo = mesh.topology
+    original_faces = topo.numValidFaces()
+
+    # Calculate average edge length
+    total_length = 0.0
+    edge_count = 0
+    valid_edges = topo.findNotLoneUndirectedEdges()
+
+    # Convert iterator to list and sample from it
+    edge_list = []
+    for edge_id in valid_edges:
+        edge_list.append(edge_id)
+
+    # Sample up to 1000 edges
+    sample_size = min(1000, len(edge_list))
+    sampled_edges = random.sample(edge_list, sample_size)
+
+    for edge_id in sampled_edges:
+        org_id = topo.org(edge_id)
+        dest_id = topo.dest(edge_id)
+
+        # Get vertex coordinates using subscript operator
+        try:
+            org_point = mesh.points[org_id]
+            dest_point = mesh.points[dest_id]
+        except:
+            org_point = mesh.points.autoResizeAt(org_id)
+            dest_point = mesh.points.autoResizeAt(dest_id)
+
+        # Calculate edge length
+        edge_vec = np.array([
+            dest_point.x - org_point.x,
+            dest_point.y - org_point.y,
+            dest_point.z - org_point.z
+        ])
+        edge_length = np.linalg.norm(edge_vec)
+        total_length += edge_length
+        edge_count += 1
+
+    avg_edge_len = total_length / edge_count if edge_count > 0 else 0.0
+    print(f"Average edge length: {avg_edge_len}")
+
+    # Create remesh settings for decimation
+    settings = mrmeshpy.RemeshSettings()
+
+    # Set remeshing parameters for better curvature preservation
+    settings.useCurvature = True  # Enable curvature-based adaptation
+    settings.maxEdgeSplits = 0  # Disable splitting edges (only reduce)
+
+    # Use a more conservative target edge length - less aggressive
+    target_ratio = min(3.0, (original_faces / 100000.0) ** 0.5)
+    settings.targetEdgeLen = avg_edge_len * target_ratio
+
+    # More conservative angle change to preserve features
+    settings.maxAngleChangeAfterFlip = 0.3  # Lower value preserves shape better
+
+    # Limit boundary movement
+    settings.maxBdShift = avg_edge_len * 0.1
+
+    settings.finalRelaxNoShrinkage = True
+    settings.projectOnOriginalMesh = True
+
+    # Use more relaxation iterations for better shape preservation
+    settings.finalRelaxIters = 3
+
+    # Run remeshing
+    print(f"Starting controlled decimation with target edge length ratio: {target_ratio:.2f}...")
+    mrmeshpy.remesh(mesh, settings)
+
+    # Report results
+    new_face_count = topo.numValidFaces()
+    reduction_percent = ((original_faces - new_face_count) / original_faces) * 100
+    print(f"Decimation complete: {new_face_count} faces (reduced by {reduction_percent:.1f}%)")
+
+    # Convert back to trimesh
+    out_verts = mrmeshnumpy.getNumpyVerts(mesh)
+    out_faces = mrmeshnumpy.getNumpyFaces(mesh.topology)
+
+    return trimesh.Trimesh(out_verts, out_faces)
+
+
+def clean_mesh_with_meshlib(mesh: trimesh.Trimesh):
+    import meshlib.mrmeshpy as mrmeshpy
+    import meshlib.mrmeshnumpy as mrmeshnumpy
+
+    # Load mesh
+    mesh = mrmeshnumpy.meshFromFacesVerts(mesh.faces, mesh.vertices)
+
+    # Find single edge for each hole in mesh
+    hole_edges = mesh.topology.findHoleRepresentiveEdges()
+
+    if len(hole_edges) > 0:
+        print('Found holes in mesh, will attempt to fix.')
+
+    for e in hole_edges:
+        #  Setup filling parameters
+        params = mrmeshpy.FillHoleParams()
+        params.metric = mrmeshpy.getUniversalMetric(mesh)
+        #  Fill hole represented by `e`
+        mrmeshpy.fillHole(mesh, e, params)
+
+    out_verts = mrmeshnumpy.getNumpyVerts(mesh)
+    out_faces = mrmeshnumpy.getNumpyFaces(mesh.topology)
+
+    return trimesh.Trimesh(out_verts, out_faces)
+
+
+def reduce_face_with_meshlib(mesh: trimesh.Trimesh, max_facenum: int = 100000):
+    current_face_count = len(mesh.faces)
+    if current_face_count <= max_facenum:
+        return mesh
+
+    import meshlib.mrmeshpy as mrmeshpy
+    import meshlib.mrmeshnumpy as mrmeshnumpy
+    import multiprocessing
+
+    # Load mesh
+    mesh = mrmeshnumpy.meshFromFacesVerts(mesh.faces, mesh.vertices)
+
+    faces_to_delete = current_face_count - max_facenum
+    #  Setup simplification parameters
+    mesh.packOptimally()
+    settings = mrmeshpy.DecimateSettings()
+    settings.maxDeletedFaces = faces_to_delete
+    settings.subdivideParts = multiprocessing.cpu_count()
+    settings.maxError = 0.05
+    settings.packMesh = True
+
+    print(f'Decimating mesh... Deleting {faces_to_delete} faces')
+    mrmeshpy.decimateMesh(mesh, settings)
+    print(f'Decimation done. Resulting mesh has {mesh.topology.faceSize()} faces')
+
+    out_verts = mrmeshnumpy.getNumpyVerts(mesh)
+    out_faces = mrmeshnumpy.getNumpyFaces(mesh.topology)
+
+    return trimesh.Trimesh(out_verts, out_faces)
+
+
 def load_mesh(path):
     if path.endswith(".glb"):
         mesh = trimesh.load(path)
@@ -147,11 +293,8 @@ class FaceReducer:
             from .DeepMesh.pipeline import DeepMeshPipeline
             pipeline = DeepMeshPipeline.from_pretrained()
             mesh = pipeline(mesh)
-        if len(mesh.faces) > max_facenum:
-            ms = import_mesh(mesh)
-            ms = reduce_face(ms, max_facenum=max_facenum)
-            current_mesh = ms.current_mesh()
-            mesh = trimesh.Trimesh(vertices=current_mesh.vertex_matrix(), faces=current_mesh.face_matrix())
+        elif len(mesh.faces) > max_facenum:
+            mesh = reduce_face_with_meshlib(mesh, max_facenum)
 
         print(f"Resulting mesh has {len(mesh.faces)} faces")
 
@@ -171,11 +314,21 @@ class FaceReducer:
         return np.array(triangles)
 
 
+class MeshlibCleaner:
+    @synchronize_timer('MeshlibCleaner')
+    def __call__(
+            self,
+            mesh: Union[trimesh.Trimesh],
+    ) -> Union[trimesh.Trimesh]:
+        mesh = clean_mesh_with_meshlib(mesh)
+        return mesh
+
+
 class FloaterRemover:
     @synchronize_timer('FloaterRemover')
     def __call__(
-        self,
-        mesh: Union[pymeshlab.MeshSet, trimesh.Trimesh, Latent2MeshOutput, str],
+            self,
+            mesh: Union[pymeshlab.MeshSet, trimesh.Trimesh, Latent2MeshOutput, str],
     ) -> Union[pymeshlab.MeshSet, trimesh.Trimesh, Latent2MeshOutput]:
         ms = import_mesh(mesh)
         ms = remove_floater(ms)
@@ -185,8 +338,8 @@ class FloaterRemover:
 
 class DegenerateFaceRemover:
     def __call__(
-        self,
-        mesh: Union[pymeshlab.MeshSet, trimesh.Trimesh, Latent2MeshOutput, str],
+            self,
+            mesh: Union[pymeshlab.MeshSet, trimesh.Trimesh, Latent2MeshOutput, str],
     ) -> Union[pymeshlab.MeshSet, trimesh.Trimesh, Latent2MeshOutput]:
         ms = import_mesh(mesh)
 
@@ -227,8 +380,8 @@ class MeshSimplifier:
 
     @synchronize_timer('MeshSimplifier')
     def __call__(
-        self,
-        mesh: Union[trimesh.Trimesh],
+            self,
+            mesh: Union[trimesh.Trimesh],
     ) -> Union[trimesh.Trimesh]:
         with tempfile.NamedTemporaryFile(suffix='.obj', delete=False) as temp_input:
             with tempfile.NamedTemporaryFile(suffix='.obj', delete=False) as temp_output:

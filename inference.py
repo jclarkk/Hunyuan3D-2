@@ -13,7 +13,8 @@ from PIL import Image
 from uuid import uuid4
 
 from hy3dgen.rmbg import RMBGRemover
-from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline, FaceReducer, FloaterRemover, DegenerateFaceRemover
+from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline, FaceReducer, FloaterRemover, DegenerateFaceRemover, \
+    MeshlibCleaner
 from hy3dgen.texgen import Hunyuan3DPaintPipeline
 
 
@@ -46,6 +47,7 @@ def run(args):
     mc_algo = 'mc' if args.device in ['cpu', 'mps'] else args.mc_algo
 
     steps = args.steps
+    fix_holes = False
     if args.geo_model == 'hunyuan3d-dit-v2-0-turbo':
         mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
             'tencent/Hunyuan3D-2',
@@ -64,6 +66,8 @@ def run(args):
             device=args.device
         )
         steps = 10
+        # In this pipeline we might get holes sometimes
+        fix_holes = True
     else:
         mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
             'tencent/Hunyuan3D-2',
@@ -84,6 +88,8 @@ def run(args):
     print(f"Mesh generation took {t3 - t2:.2f} seconds")
     mesh = FloaterRemover()(mesh)
     mesh = DegenerateFaceRemover()(mesh)
+    if fix_holes:
+        mesh = MeshlibCleaner()(mesh)
     mesh = FaceReducer()(mesh, max_facenum=args.face_count, remesh_method=args.remesh_method)
     t4 = time.time()
     print(f"Mesh Optimization took {t4 - t3:.2f} seconds")
