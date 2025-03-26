@@ -75,6 +75,8 @@ class Hunyuan3DPaintPipeline:
                     import huggingface_hub
                     # download from huggingface
                     model_path = huggingface_hub.snapshot_download(repo_id=original_model_path)
+                    delight_model_path = os.path.join(model_path, 'hunyuan3d-delight-v2-0')
+                    multiview_model_path = os.path.join(model_path, 'hunyuan3d-paint-v2-0')
                 except ImportError:
                     logger.warning(
                         "You need to install HuggingFace Hub to load models from the hub."
