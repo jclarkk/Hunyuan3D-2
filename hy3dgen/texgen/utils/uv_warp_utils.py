@@ -42,7 +42,7 @@ def open3d_mesh_uv_wrap(mesh, resolution=1024):
         o3d_mesh.vertex.positions = o3d.core.Tensor(mesh.vertices)
         o3d_mesh.triangle.indices = o3d.core.Tensor(mesh.faces)
 
-        o3d_mesh.compute_uvatlas(size=resolution)
+        o3d_mesh.compute_uvatlas(size=resolution, parallel_partitions=4)
 
         new_v = mesh.vertices[mesh.faces.reshape(-1)]
         new_f = np.arange(len(new_v)).reshape(-1, 3)
