@@ -16,7 +16,7 @@ import trimesh
 import numpy as np
 
 
-def mesh_uv_wrap(mesh, gutter_size=4.0, resolution=1024):
+def mesh_uv_wrap(mesh, padding=2, resolution=1024, max_iterations=4):
     import xatlas
 
     if isinstance(mesh, trimesh.Scene):
@@ -25,26 +25,34 @@ def mesh_uv_wrap(mesh, gutter_size=4.0, resolution=1024):
     if len(mesh.faces) > 100000:
         raise ValueError("The mesh has more than 100,000 faces, which is not supported.")
 
+    vertices = np.asarray(mesh.vertices, dtype=np.float32)
+    faces = np.asarray(mesh.faces, dtype=np.uint32)
+
     atlas = xatlas.Atlas()
 
     # Add the mesh to the atlas
-    atlas.add_mesh(mesh.vertices, mesh.faces)
+    atlas.add_mesh(vertices, faces)
+
     chart_options = xatlas.ChartOptions()
-    chart_options.max_iterations = 4
+    chart_options.max_iterations = max_iterations
+    chart_options.normal_seam_weight = 0.5
+    chart_options.texture_seam_weight = 1.0
 
     pack_options = xatlas.PackOptions()
-    pack_options.padding = int(gutter_size)
+    pack_options.padding = padding
     pack_options.resolution = resolution
+    pack_options.bilinear = True
 
     atlas.generate(chart_options=chart_options, pack_options=pack_options)
 
-    # Get the result
-    vmapping, indices, uvs = atlas.get_mesh_result(0)
+    vmapping, indices, uvs = atlas[0]
 
     # Update the mesh
     mesh.vertices = mesh.vertices[vmapping]
     mesh.faces = indices
     mesh.visual.uv = uvs
+
+    return mesh
 
 def open3d_mesh_uv_wrap(mesh, gutter_size=2.0, max_stretch=0.06, resolution=1024):
     try:
