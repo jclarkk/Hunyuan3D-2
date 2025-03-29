@@ -16,23 +16,37 @@ import trimesh
 import numpy as np
 
 
-def mesh_uv_wrap(mesh):
+def mesh_uv_wrap(mesh, gutter_size=4.0, resolution=1024):
     import xatlas
+
     if isinstance(mesh, trimesh.Scene):
         mesh = mesh.dump(concatenate=True)
 
     if len(mesh.faces) > 100000:
         raise ValueError("The mesh has more than 100,000 faces, which is not supported.")
 
-    vmapping, indices, uvs = xatlas.parametrize(mesh.vertices, mesh.faces)
+    atlas = xatlas.Atlas()
 
+    # Add the mesh to the atlas
+    atlas.add_mesh(mesh.vertices, mesh.faces)
+    chart_options = xatlas.ChartOptions()
+    chart_options.max_iterations = 4
+
+    pack_options = xatlas.PackOptions()
+    pack_options.padding = int(gutter_size)
+    pack_options.resolution = resolution
+
+    atlas.generate(chart_options=chart_options, pack_options=pack_options)
+
+    # Get the result
+    vmapping, indices, uvs = atlas.get_mesh_result(0)
+
+    # Update the mesh
     mesh.vertices = mesh.vertices[vmapping]
     mesh.faces = indices
     mesh.visual.uv = uvs
 
-    return mesh
-
-def open3d_mesh_uv_wrap(mesh, resolution=1024):
+def open3d_mesh_uv_wrap(mesh, gutter_size=2.0, max_stretch=0.06, resolution=1024):
     try:
         import open3d as o3d
         if isinstance(mesh, trimesh.Scene):
@@ -42,7 +56,7 @@ def open3d_mesh_uv_wrap(mesh, resolution=1024):
         o3d_mesh.vertex.positions = o3d.core.Tensor(mesh.vertices)
         o3d_mesh.triangle.indices = o3d.core.Tensor(mesh.faces)
 
-        o3d_mesh.compute_uvatlas(size=resolution, parallel_partitions=4)
+        o3d_mesh.compute_uvatlas(size=resolution, parallel_partitions=4, gutter=gutter_size, max_stretch=max_stretch)
 
         new_v = mesh.vertices[mesh.faces.reshape(-1)]
         new_f = np.arange(len(new_v)).reshape(-1, 3)

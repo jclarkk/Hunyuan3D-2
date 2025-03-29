@@ -261,7 +261,7 @@ class Hunyuan3DPaintPipeline:
         elif unwrap_method == 'bpy':
             mesh = bpy_unwrap_mesh(mesh)
         elif unwrap_method == 'xatlas':
-            mesh = mesh_uv_wrap(mesh)
+            mesh = mesh_uv_wrap(mesh, resolution=texture_size)
         else:
             raise ValueError(f"Invalid unwrap method {unwrap_method}")
         t1 = time.time()
