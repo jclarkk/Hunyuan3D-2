@@ -58,13 +58,6 @@
 
 #### * Phsically based rendering (PBR) for texture generation (Based on rgbx - https://github.com/zheng95z/rgbx)
 #### * Enhanced texture angles, we might require more than the original 6 angles for better texture generation.
-#### * mmgp profiles:
-
-- HighRAM_HighVRAM  (1): at least 48 GB of RAM and 12 GB of VRAM 
-- HighRAM_LowVRAM  (2): at least 48 GB of RAM and 6 GB of VRAM
-- LowRAM_HighVRAM  (3): at least 32 GB of RAM and 12 GB of VRAM
-- LowRAM_LowVRAM  (4): at least 32 GB of RAM and 6 GB of VRAM
-- VerylowRAM_LowVRAM  (5): at least 24 GB of RAM and 6 GB of VRAM 
 
 ```
 python gradio_app.py --enable_t23d --profile 5
