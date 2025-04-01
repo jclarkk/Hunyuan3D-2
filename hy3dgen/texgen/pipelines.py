@@ -57,7 +57,9 @@ class Hunyuan3DTexGenConfig:
         self.bake_exp = 4
         self.merge_method = 'fast'
 
-        self.pipe_dict = {'hunyuan3d-paint-v2-0': 'hunyuanpaint', 'hunyuan3d-paint-v2-0-turbo': 'hunyuanpaint-turbo'}
+        self.pipe_dict = {'hunyuan3d-paint-v2-0': 'hunyuanpaint',
+                          'hunyuan3d-paint-v2-0-turbo': 'hunyuanpaint-turbo',
+                          'mv-adapter': 'mv-adapter'}
         self.pipe_name = self.pipe_dict[mv_model]
 
 
