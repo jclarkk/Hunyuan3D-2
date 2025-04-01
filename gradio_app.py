@@ -276,7 +276,18 @@ def generation_all(
         pbr=False,
         texture_size=1024
 ):
-    original_image = image.copy()
+    if mv_image_front is not None or mv_image_back is not None or mv_image_left is not None or mv_image_right is not None:
+        original_images = []
+        if mv_image_front is not None:
+            original_images.append(mv_image_front.copy())
+        if mv_image_back is not None:
+            original_images.append(mv_image_back.copy())
+        if mv_image_left is not None:
+            original_images.append(mv_image_left.copy())
+        if mv_image_right is not None:
+            original_images.append(mv_image_right.copy())
+    else:
+        original_images = [image.copy()]
 
     start_time_0 = time.time()
     mesh, image, save_folder, stats, seed = _gen_shape(
@@ -300,7 +311,7 @@ def generation_all(
     tmp_time = time.time()
     textured_mesh = texgen_worker(
         mesh,
-        original_image,
+        original_images,
         upscale_model=upscale_model,
         enhance_texture_angles=enhance_texture_angles,
         pbr=pbr,
@@ -703,7 +714,7 @@ if __name__ == '__main__':
     parser.add_argument('--compile', action='store_true')
     parser.add_argument('--low_vram_mode', action='store_true')
     parser.add_argument('--use_delight', action='store_true', help='Use Delight model', default=False)
-    parser.add_argument('--mv_model', type=str, default='hunyuan3d-paint-v2-0', help='Multiview model to use')
+    parser.add_argument('--mv_model', type=str, default='hunyuan3d-paint-v2-0-turbo', help='Multiview model to use')
     args = parser.parse_args()
 
     SAVE_DIR = args.cache_path

@@ -76,18 +76,21 @@ def run(args):
     if args.prompt is not None:
         t2 = time.time()
         image = t2i_pipeline(args.prompt)
+        images = [image]
         t3 = time.time()
         print(f"Text to image took {t3 - t2:.2f} seconds")
     else:
         # Only one image supported right now
-        image_path = args.image_paths[0]
-        image = Image.open(image_path)
+        images = [Image.open(image_path) for image_path in args.image_paths]
 
     t4 = time.time()
     # Preprocess the image
+    processed_images = []
     if args.mv_model == 'hunyuan3d-paint-v2-0':
-        rmbg_remover = RMBGRemover()
-        image = rmbg_remover(image)
+        for image in images:
+            rmbg_remover = RMBGRemover()
+            image = rmbg_remover(image)
+            processed_images.append(image)
 
     t5 = time.time()
     print(f"Image processing took {t5 - t4:.2f} seconds")
@@ -96,7 +99,7 @@ def run(args):
     t6 = time.time()
     mesh = texture_pipeline(
         mesh,
-        image=image,
+        processed_images,
         unwrap_method=args.unwrap_method,
         upscale_model=args.upscale_model,
         pbr=args.pbr,

@@ -227,7 +227,7 @@ class Hunyuan3DPaintPipeline:
     @torch.no_grad()
     def __call__(self,
                  mesh,
-                 image,
+                 images,
                  unwrap_method='xatlas',
                  upscale_model=None,
                  enhance_texture_angles=False,
@@ -238,15 +238,15 @@ class Hunyuan3DPaintPipeline:
         self.config.texture_size = texture_size
         self.render.set_default_texture_resolution(texture_size)
 
-        if not isinstance(image, List):
-            image = [image]
+        if not isinstance(images, List):
+            images = [images]
 
         images_prompt = []
-        for i in range(len(image)):
-            if isinstance(image[i], str):
-                image_prompt = Image.open(image[i])
+        for i in range(len(images)):
+            if isinstance(images[i], str):
+                image_prompt = Image.open(images[i])
             else:
-                image_prompt = image[i]
+                image_prompt = images[i]
             images_prompt.append(image_prompt)
 
         images_prompt = [self.recenter_image(image_prompt) for image_prompt in images_prompt]
@@ -317,7 +317,7 @@ class Hunyuan3DPaintPipeline:
 
         print('Generate multiviews...')
         t0 = time.time()
-        if self.config.mv_model == 'hunyuan3d-paint-v2-0':
+        if self.config.mv_model in ['hunyuan3d-paint-v2-0', 'hunyuan3d-paint-v2-0-turbo']:
             multiviews = self.models['multiview_model'](images_prompt, normal_maps + position_maps, camera_info)
         elif self.config.mv_model == 'mv-adapter':
             multiviews = self.models['multiview_model'](mesh, images_prompt[0], normal_maps, position_maps, camera_info,
