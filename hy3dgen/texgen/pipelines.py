@@ -16,7 +16,7 @@
 import logging
 import os
 import time
-from typing import Union, Optional
+from typing import Union, Optional, List
 
 import numpy as np
 import torch
@@ -56,6 +56,9 @@ class Hunyuan3DTexGenConfig:
         self.texture_size = 1024
         self.bake_exp = 4
         self.merge_method = 'fast'
+
+        self.pipe_dict = {'hunyuan3d-paint-v2-0': 'hunyuanpaint', 'hunyuan3d-paint-v2-0-turbo': 'hunyuanpaint-turbo'}
+        self.pipe_name = self.pipe_dict[mv_model]
 
 
 class Hunyuan3DPaintPipeline:
@@ -235,12 +238,18 @@ class Hunyuan3DPaintPipeline:
         self.config.texture_size = texture_size
         self.render.set_default_texture_resolution(texture_size)
 
-        if isinstance(image, str):
-            image_prompt = Image.open(image)
-        else:
-            image_prompt = image
+        if not isinstance(image, List):
+            image = [image]
 
-        image_prompt = self.recenter_image(image_prompt)
+        images_prompt = []
+        for i in range(len(image)):
+            if isinstance(image[i], str):
+                image_prompt = Image.open(image[i])
+            else:
+                image_prompt = image[i]
+            images_prompt.append(image_prompt)
+
+        images_prompt = [self.recenter_image(image_prompt) for image_prompt in images_prompt]
 
         if self.config.use_delight:
             print('Removing light and shadow...')
@@ -249,8 +258,8 @@ class Hunyuan3DPaintPipeline:
             if self.config.mv_model == 'mv-adapter':
                 height = 768
                 width = 768
+            images_prompt = [self.models['delight_model'](image_prompt) for image_prompt in images_prompt]
 
-            image_prompt = self.models['delight_model'](image_prompt, height, width)
             t1 = time.time()
             print(f"Light and shadow removal took {t1 - t0:.2f} seconds")
 
@@ -309,9 +318,9 @@ class Hunyuan3DPaintPipeline:
         print('Generate multiviews...')
         t0 = time.time()
         if self.config.mv_model == 'hunyuan3d-paint-v2-0':
-            multiviews = self.models['multiview_model'](image_prompt, normal_maps + position_maps, camera_info)
+            multiviews = self.models['multiview_model'](images_prompt, normal_maps + position_maps, camera_info)
         elif self.config.mv_model == 'mv-adapter':
-            multiviews = self.models['multiview_model'](mesh, image_prompt, normal_maps, position_maps, camera_info,
+            multiviews = self.models['multiview_model'](mesh, images_prompt[0], normal_maps, position_maps, camera_info,
                                                         len(selected_camera_azims), seed=seed)
         else:
             raise ValueError(f"Invalid MV model {self.config.mv_model}")

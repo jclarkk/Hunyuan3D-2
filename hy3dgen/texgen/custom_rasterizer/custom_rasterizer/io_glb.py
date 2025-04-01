@@ -191,7 +191,10 @@ def LoadGlb(path):
 
                 if primitive.material is not None:
                     material = gltf.materials[primitive.material]
-                    if material.pbrMetallicRoughness is not None and material.pbrMetallicRoughness.baseColorTexture is not None:
+                    if (
+                        material.pbrMetallicRoughness is not None 
+                        and material.pbrMetallicRoughness.baseColorTexture is not None
+                    ):
                         texture_index = material.pbrMetallicRoughness.baseColorTexture.index
                         texture = gltf.textures[texture_index]
                         image_index = texture.source

@@ -29,7 +29,7 @@ import uuid
 
 from hy3dgen.shapegen.utils import logger
 
-MAX_SEED = 1000000
+MAX_SEED = int(1e7)
 
 
 def get_example_img_list():
@@ -695,7 +695,7 @@ if __name__ == '__main__':
     parser.add_argument('--port', type=int, default=8080)
     parser.add_argument('--host', type=str, default='0.0.0.0')
     parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--mc_algo', type=str, default='dmc')
+    parser.add_argument('--mc_algo', type=str, default='mc')
     parser.add_argument('--cache-path', type=str, default='gradio_cache')
     parser.add_argument('--enable_t23d', action='store_true')
     parser.add_argument('--disable_tex', action='store_true')
@@ -766,7 +766,7 @@ if __name__ == '__main__':
     if args.enable_t23d:
         from hy3dgen.text2image import HunyuanDiTPipeline
 
-        t2i_worker = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled')
+        t2i_worker = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled', device=args.device)
         HAS_T2I = True
 
     from hy3dgen.shapegen import FaceReducer, FloaterRemover, DegenerateFaceRemover, Hunyuan3DDiTFlowMatchingPipeline

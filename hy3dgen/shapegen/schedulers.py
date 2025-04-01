@@ -345,7 +345,7 @@ class ConsistencyFlowMatchEulerDiscreteScheduler(SchedulerMixin, ConfigMixin):
 
         self.euler_timesteps = euler_timesteps
         self.sigmas = sigmas[self.euler_timesteps]
-        self.sigmas = torch.from_numpy((self.sigmas.copy()))
+        self.sigmas = torch.from_numpy((self.sigmas.copy())).to(dtype=torch.float32)
         self.timesteps = self.sigmas * num_train_timesteps
         self._step_index = None
         self._begin_index = None

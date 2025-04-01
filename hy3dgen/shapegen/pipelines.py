@@ -264,7 +264,7 @@ class Hunyuan3DDiTPipeline:
         enabled: bool = True,
         adaptive_kv_selection=True,
         topk_mode='mean',
-        mc_algo='dmc',
+        mc_algo='mc',
         replace_vae=True,
     ):
         if enabled:

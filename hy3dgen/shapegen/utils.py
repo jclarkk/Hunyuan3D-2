@@ -100,10 +100,13 @@ def smart_load_model(
     if not os.path.exists(model_path):
         logger.info('Model path not exists, try to download from huggingface')
         try:
-            import huggingface_hub
-            # download from huggingface
-            path = huggingface_hub.snapshot_download(repo_id=original_model_path)
-            model_path = os.path.join(path, subfolder)
+            from huggingface_hub import snapshot_download
+            # 只下载指定子目录
+            path = snapshot_download(
+                repo_id=original_model_path,
+                allow_patterns=[f"{subfolder}/*"],  # 关键修改：模式匹配子文件夹
+            )
+            model_path = os.path.join(path, subfolder)  # 保持路径拼接逻辑不变
         except ImportError:
             logger.warning(
                 "You need to install HuggingFace Hub to load models from the hub."
