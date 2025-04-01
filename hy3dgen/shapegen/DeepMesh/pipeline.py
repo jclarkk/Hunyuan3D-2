@@ -69,4 +69,6 @@ class DeepMeshPipeline:
             return None
         vertices = vertices[..., [2, 1, 0]]
         faces = torch.arange(1, len(vertices) + 1, device='cuda').view(-1, 3)
+        vertices = vertices.cpu().numpy()
+        faces = faces.cpu().numpy()
         return to_mesh(vertices, faces, transpose=False, post_process=True)
