@@ -714,7 +714,7 @@ if __name__ == '__main__':
     parser.add_argument('--compile', action='store_true')
     parser.add_argument('--low_vram_mode', action='store_true')
     parser.add_argument('--use_delight', action='store_true', help='Use Delight model', default=False)
-    parser.add_argument('--mv_model', type=str, default='hunyuan3d-paint-v2-0-turbo', help='Multiview model to use')
+    parser.add_argument('--mv_model', type=str, default='hunyuan3d-paint-v2-0', help='Multiview model to use')
     args = parser.parse_args()
 
     SAVE_DIR = args.cache_path

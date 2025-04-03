@@ -109,7 +109,7 @@ def run(args):
             texture_pipeline.enable_model_cpu_offload()
             texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
         print('3D Paint pipeline loaded')
-        mesh = texture_pipeline(mesh, image=image, unwrap_method=args.unwrap_method, seed=args.seed)
+        mesh = texture_pipeline(mesh, image, unwrap_method=args.unwrap_method, seed=args.seed)
         t6 = time.time()
         print(f"Texture generation took {t6 - t5:.2f} seconds")
     else:

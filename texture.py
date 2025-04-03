@@ -11,7 +11,7 @@ import trimesh
 from PIL import Image
 
 from hy3dgen.rmbg import RMBGRemover
-from hy3dgen.shapegen.postprocessors import import_mesh, reduce_face, FaceReducer
+from hy3dgen.shapegen.postprocessors import FaceReducer
 from hy3dgen.texgen import Hunyuan3DPaintPipeline
 from hy3dgen.text2image import HunyuanDiTPipeline
 
@@ -39,13 +39,7 @@ def run(args):
         mesh = mesh.to_geometry()
 
     # Reduce face count
-    if len(mesh.faces) > 100000:
-        ms = import_mesh(mesh)
-        ms = reduce_face(ms, max_facenum=90000)
-        current_mesh = ms.current_mesh()
-        mesh = trimesh.Trimesh(vertices=current_mesh.vertex_matrix(), faces=current_mesh.face_matrix())
-
-    if args.remesh_method is not None and args.remesh_method != 'None':
+    if (args.remesh_method is not None and args.remesh_method != 'None') or len(mesh.faces) > 100000:
         mesh = FaceReducer()(mesh, remesh_method=args.remesh_method)
 
         # Check if face count is still too high
@@ -91,6 +85,8 @@ def run(args):
             rmbg_remover = RMBGRemover()
             image = rmbg_remover(image)
             processed_images.append(image)
+    else:
+        processed_images = images
 
     t5 = time.time()
     print(f"Image processing took {t5 - t4:.2f} seconds")
