@@ -273,6 +273,8 @@ class FaceReducer:
         target_vertex_count = int(max_facenum / 8)
 
         print(f"Reducing face count to {max_facenum}...")
+        mesh = reduce_face_with_meshlib(mesh, max_facenum)
+
         if remesh_method is not None and remesh_method == "im":
             vertices, faces = PyNIM.remesh(
                 np.array(mesh.vertices, dtype=np.float32),
@@ -293,8 +295,6 @@ class FaceReducer:
             from .DeepMesh.pipeline import DeepMeshPipeline
             pipeline = DeepMeshPipeline.from_pretrained()
             mesh = pipeline(mesh)
-        elif len(mesh.faces) > max_facenum:
-            mesh = reduce_face_with_meshlib(mesh, max_facenum)
 
         print(f"Resulting mesh has {len(mesh.faces)} faces")
 
