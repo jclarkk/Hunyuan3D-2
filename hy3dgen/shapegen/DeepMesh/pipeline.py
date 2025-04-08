@@ -69,4 +69,9 @@ class DeepMeshPipeline:
             return None
         vertices = vertices[..., [2, 1, 0]]
         faces = torch.arange(1, len(vertices) + 1, device='cuda').view(-1, 3).cpu()
-        return to_mesh(vertices, faces, transpose=False, post_process=True)
+        mesh = to_mesh(vertices, faces, transpose=False, post_process=True)
+
+        trimesh.repair.fix_normals(mesh, multibody=False)
+        trimesh.repair.fix_inversion(mesh, multibody=False)
+
+        return mesh

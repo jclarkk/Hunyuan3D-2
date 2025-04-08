@@ -46,7 +46,10 @@ def run(args):
 
     mc_algo = 'mc' if args.device in ['cpu', 'mps'] else args.mc_algo
 
-    steps = args.steps
+    if args.steps is None:
+        steps = 5 if 'turbo' in args.geo_model else 30
+    else:
+        steps = args.steps
     fix_holes = False
     if args.geo_model == 'hunyuan3d-dit-v2-0-turbo':
         mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
@@ -65,7 +68,6 @@ def run(args):
             variant='fp16',
             device=args.device
         )
-        steps = 10
         # In this pipeline we might get holes sometimes
         fix_holes = True
     else:
@@ -82,7 +84,8 @@ def run(args):
     # Generate mesh
     mesh = mesh_pipeline(image=image,
                          num_inference_steps=steps,
-                         octree_resolution=512,
+                         octree_resolution=args.octree_resolution,
+                         guidance_scale=args.guidance_scale,
                          generator=torch.manual_seed(args.seed))[0]
     t3 = time.time()
     print(f"Mesh generation took {t3 - t2:.2f} seconds")
@@ -136,7 +139,9 @@ if __name__ == "__main__":
                         help='Path to input images. Can specify multiple paths separated by spaces')
     parser.add_argument('--output_dir', type=str, default='./output', help='Path to output directory')
     parser.add_argument('--seed', type=int, default=0, help='Seed for the random number generator')
-    parser.add_argument('--steps', type=int, default=30, help='Number of inference steps')
+    parser.add_argument('--steps', type=int, default=None, help='Number of inference steps')
+    parser.add_argument('--octree_resolution', type=int, default=384)
+    parser.add_argument('--guidance_scale', type=float, default=5.0)
     parser.add_argument('--device', type=str, default='cuda')
     parser.add_argument('--geo_model', type=str, default='hunyuan3d-dit-v2-0')
     parser.add_argument('--mc_algo', type=str, default='dmc')
