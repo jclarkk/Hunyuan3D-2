@@ -256,10 +256,6 @@ class Hunyuan3DPaintPipeline:
         if self.config.use_delight:
             print('Removing light and shadow...')
             t0 = time.time()
-            height, width = 512, 512
-            if self.config.mv_model == 'mv-adapter':
-                height = 768
-                width = 768
             images_prompt = [self.models['delight_model'](image_prompt) for image_prompt in images_prompt]
 
             t1 = time.time()
@@ -391,18 +387,46 @@ class Hunyuan3DPaintPipeline:
 
         normal_texture, metallic_roughness_texture, metallic_factor, roughness_factor = None, None, None, None
         if pbr:
+            from .pbr.pipelines import RGB2XPipeline, StableNormalPipeline
+
+            pre_pbr_multiviews = [view.resize((1024, 1024)) for view in multiviews[:6]]
+            # Let's do normal map first
             t0 = time.time()
-            from .pbr.pipelines import RGB2XPipeline
+            normal_pipe = StableNormalPipeline.from_pretrained(self.config.device)
+
+            normal_multiviews = []
+            i = 0
+            for view in pre_pbr_multiviews:
+                curr_normal_view = normal_pipe(view)
+
+                if debug:
+                    curr_normal_view.save(f'debug_normal_multiview_{i}.png')
+                i += 1
+                normal_multiviews.append(curr_normal_view)
+            t1 = time.time()
+
+            print('Baking normal PBR texture...')
+            normal_texture, normal_mask = self.bake_from_multiview(normal_multiviews,
+                                                            self.config.candidate_camera_elevs,
+                                                            self.config.candidate_camera_azims,
+                                                            self.config.candidate_view_weights,
+                                                            method=self.config.merge_method)
+            normal_texture = self.texture_inpaint(normal_texture, normal_mask)
+            normal_texture = normal_texture.cpu().numpy()
+            normal_texture = Image.fromarray((normal_texture * 255).astype(np.uint8))
+            if debug:
+                normal_texture.save(f'debug_normal_texture.png')
+
+            print(f"Generating normal maps took {t1 - t0:.2f} seconds")
+
             pbr_pipeline = RGB2XPipeline.from_pretrained("cuda")
 
             # Do it in batches of 6
-            pre_pbr_multiviews = [view.resize((1024, 1024)) for view in multiviews[:6]]
-            albedo_multiviews, metallic_multiviews, normal_multiviews, roughness_multiviews = (
+            albedo_multiviews, metallic_multiviews, _, roughness_multiviews = (
                 self.generate_pbr_for_batch(pbr_pipeline, pre_pbr_multiviews))
 
             for i in range(len(albedo_multiviews)):
                 albedo_multiviews[i] = albedo_multiviews[i].resize((self.config.texture_size, self.config.texture_size))
-                normal_multiviews[i] = normal_multiviews[i].resize((self.config.texture_size, self.config.texture_size))
                 roughness_multiviews[i] = roughness_multiviews[i].resize(
                     (self.config.texture_size, self.config.texture_size))
                 metallic_multiviews[i] = metallic_multiviews[i].resize(
@@ -410,26 +434,27 @@ class Hunyuan3DPaintPipeline:
 
                 if debug:
                     albedo_multiviews[i].save(f'debug_albedo_multiview_{i}.png')
-                    normal_multiviews[i].save(f'debug_normal_multiview_{i}.png')
                     roughness_multiviews[i].save(f'debug_roughness_multiview_{i}.png')
                     metallic_multiviews[i].save(f'debug_metallic_multiview_{i}.png')
 
-            normal_texture = None
-
             print('Baking roughness PBR texture...')
-            roughness_texture, _ = self.bake_from_multiview(roughness_multiviews,
+            roughness_texture, roughness_mask = self.bake_from_multiview(roughness_multiviews,
                                                             self.config.candidate_camera_elevs,
                                                             self.config.candidate_camera_azims,
                                                             self.config.candidate_view_weights,
                                                             method=self.config.merge_method)
+            roughness_texture = self.texture_inpaint(roughness_texture, roughness_mask)
             roughness_texture = roughness_texture.cpu().numpy()
+            roughness_texture = Image.fromarray((roughness_texture * 255).astype(np.uint8))
             print('Baking metallic PBR texture...')
-            metallic_texture, _ = self.bake_from_multiview(metallic_multiviews,
+            metallic_texture, metallic_mask = self.bake_from_multiview(metallic_multiviews,
                                                            self.config.candidate_camera_elevs,
                                                            self.config.candidate_camera_azims,
                                                            self.config.candidate_view_weights,
                                                            method=self.config.merge_method)
+            metallic_texture = self.texture_inpaint(metallic_texture, metallic_mask)
             metallic_texture = metallic_texture.cpu().numpy()
+            metallic_texture = Image.fromarray((metallic_texture * 255).astype(np.uint8))
             metallic_roughness_texture = pbr_pipeline.combine_roughness_metalness(
                 roughness_texture,
                 metallic_texture
@@ -437,8 +462,8 @@ class Hunyuan3DPaintPipeline:
 
             roughness_factor, metallic_factor = 0.8, 0.8
 
-            t1 = time.time()
-            print(f"PBR texture baking took {t1 - t0:.2f} seconds")
+            t2 = time.time()
+            print(f"PBR texture baking took {t2 - t0:.2f} seconds")
 
         mask_np = (mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
 

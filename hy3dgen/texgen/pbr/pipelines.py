@@ -94,3 +94,24 @@ class RGB2XPipeline:
         roughness_likelihood = 1.0 - metallic_likelihood
 
         return metallic_likelihood, roughness_likelihood
+
+
+class StableNormalPipeline:
+
+    @classmethod
+    def from_pretrained(cls, device):
+        pipe = torch.hub.load(
+            "hugoycj/StableNormal",
+            "StableNormal_turbo",
+            trust_repo=True,
+            yoso_version='yoso-normal-v1-8-1'
+        )
+        pipe.to(device)
+
+        return cls(pipe)
+
+    def __init__(self, pipe):
+        self.pipe = pipe
+
+    def __call__(self, input_image: Image.Image) -> dict:
+        return self.pipe(input_image)
