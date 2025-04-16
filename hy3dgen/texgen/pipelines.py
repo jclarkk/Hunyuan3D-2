@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 class Hunyuan3DTexGenConfig:
 
     def __init__(self, light_remover_ckpt_path, multiview_ckpt_path, mv_model='hunyuan3d-paint-v2-0',
-                 use_delight=False, device='cuda'):
+                 use_delight=False, device='cpu'):
         self.device = device
         self.mv_model = mv_model
         self.light_remover_ckpt_path = light_remover_ckpt_path
@@ -391,33 +391,33 @@ class Hunyuan3DPaintPipeline:
 
             pre_pbr_multiviews = [view.resize((1024, 1024)) for view in multiviews[:6]]
             # Let's do normal map first
-            t0 = time.time()
-            normal_pipe = StableNormalPipeline.from_pretrained(self.config.device)
-
-            normal_multiviews = []
-            i = 0
-            for view in pre_pbr_multiviews:
-                curr_normal_view = normal_pipe(view)
-
-                if debug:
-                    curr_normal_view.save(f'debug_normal_multiview_{i}.png')
-                i += 1
-                normal_multiviews.append(curr_normal_view)
-            t1 = time.time()
-
-            print('Baking normal PBR texture...')
-            normal_texture, normal_mask = self.bake_from_multiview(normal_multiviews,
-                                                            self.config.candidate_camera_elevs,
-                                                            self.config.candidate_camera_azims,
-                                                            self.config.candidate_view_weights,
-                                                            method=self.config.merge_method)
-            normal_texture = self.texture_inpaint(normal_texture, normal_mask)
-            normal_texture = normal_texture.cpu().numpy()
-            normal_texture = Image.fromarray((normal_texture * 255).astype(np.uint8))
-            if debug:
-                normal_texture.save(f'debug_normal_texture.png')
-
-            print(f"Generating normal maps took {t1 - t0:.2f} seconds")
+            # t0 = time.time()
+            # normal_pipe = StableNormalPipeline.from_pretrained(self.config.device)
+            #
+            # normal_multiviews = []
+            # i = 0
+            # for view in pre_pbr_multiviews:
+            #     curr_normal_view = normal_pipe(view)
+            #
+            #     if debug:
+            #         curr_normal_view.save(f'debug_normal_multiview_{i}.png')
+            #     i += 1
+            #     normal_multiviews.append(curr_normal_view)
+            # t1 = time.time()
+            #
+            # print('Baking normal PBR texture...')
+            # normal_texture, normal_mask = self.bake_from_multiview(normal_multiviews,
+            #                                                 self.config.candidate_camera_elevs,
+            #                                                 self.config.candidate_camera_azims,
+            #                                                 self.config.candidate_view_weights,
+            #                                                 method=self.config.merge_method)
+            # normal_texture = self.texture_inpaint(normal_texture, normal_mask)
+            # normal_texture = normal_texture.cpu().numpy()
+            # normal_texture = Image.fromarray((normal_texture * 255).astype(np.uint8))
+            # if debug:
+            #     normal_texture.save(f'debug_normal_texture.png')
+            #
+            # print(f"Generating normal maps took {t1 - t0:.2f} seconds")
 
             pbr_pipeline = RGB2XPipeline.from_pretrained("cuda")
 

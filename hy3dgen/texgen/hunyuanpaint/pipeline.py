@@ -256,7 +256,9 @@ class HunyuanPaintPipeline(StableDiffusionPipeline):
         return_dict=True,
         **cached_condition,
     ):
-        device = self._execution_device
+        device = torch.device("cuda")
+        self.vae.to(device)
+        self.unet.to(device)
 
         if image is None:
             raise ValueError("Inputting embeddings not supported for this pipeline. Please pass an image.")

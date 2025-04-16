@@ -1,3 +1,5 @@
+from hy3dgen.mmgp_utils import replace_property_getter
+
 try:
     # If using Blender's uv unwrap then we must initialize bpy
     import bpy
@@ -7,8 +9,10 @@ except ImportError:
 import argparse
 import os
 import time
+
 import trimesh
 from PIL import Image
+from mmgp import offload
 
 from hy3dgen.rmbg import RMBGRemover
 from hy3dgen.shapegen.postprocessors import FaceReducer
@@ -51,14 +55,24 @@ def run(args):
 
     t2 = time.time()
     # Load models
+    t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled')
     texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2',
                                                               mv_model=args.mv_model,
                                                               use_delight=args.use_delight)
-    if args.low_vram_mode:
-        texture_pipeline.enable_model_cpu_offload()
-    print('3D Paint pipeline loaded')
 
+    # Handle MMGP offloading
+    profile = args.profile
+    kwargs = {}
+
+    pipe = offload.extract_models("t2i_worker", t2i_pipeline)
+    pipe.update(offload.extract_models("texgen_worker", texture_pipeline))
     texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
+
+    if profile != 1 and profile != 3:
+        kwargs["budgets"] = {"*": 2200}
+
+    offload.profile(pipe, profile_no=profile, verboseLevel=args.verbose, **kwargs)
+    print('3D Paint pipeline loaded')
 
     t2i_pipeline = None
     if args.prompt is not None:
@@ -138,7 +152,8 @@ if __name__ == "__main__":
     parser.add_argument('--enhance_texture_angles', action='store_true', help='Enhance texture angles', default=False)
     parser.add_argument('--pbr', action='store_true', help='Generate PBR textures', default=False)
     parser.add_argument('--debug', action='store_true', help='Debug mode', default=False)
-    parser.add_argument('--low_vram_mode', action='store_true')
+    parser.add_argument('--profile', type=int, default=3)
+    parser.add_argument('--verbose', type=int, default=1)
 
     args = parser.parse_args()
 

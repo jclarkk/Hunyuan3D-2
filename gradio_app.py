@@ -16,6 +16,7 @@ import os
 import random
 import shutil
 import time
+import uuid
 from glob import glob
 from pathlib import Path
 
@@ -25,8 +26,9 @@ import trimesh
 import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-import uuid
+from mmgp import offload
 
+from hy3dgen.mmgp_utils import replace_property_getter
 from hy3dgen.shapegen.utils import logger
 
 MAX_SEED = int(1e7)
@@ -712,7 +714,8 @@ if __name__ == '__main__':
     parser.add_argument('--disable_tex', action='store_true')
     parser.add_argument('--enable_flashvdm', action='store_true')
     parser.add_argument('--compile', action='store_true')
-    parser.add_argument('--low_vram_mode', action='store_true')
+    parser.add_argument('--profile', type=str, default="3")
+    parser.add_argument('--verbose', type=str, default="1")
     parser.add_argument('--use_delight', action='store_true', help='Use Delight model', default=False)
     parser.add_argument('--mv_model', type=str, default='hunyuan3d-paint-v2-0', help='Multiview model to use')
     args = parser.parse_args()
@@ -800,6 +803,23 @@ if __name__ == '__main__':
     floater_remove_worker = FloaterRemover()
     degenerate_face_remove_worker = DegenerateFaceRemover()
     face_reduce_worker = FaceReducer()
+
+    profile = int(args.profile)
+    kwargs = {}
+    replace_property_getter(i23d_worker, "_execution_device", lambda self: "cuda")
+    pipe = offload.extract_models("i23d_worker", i23d_worker)
+    if HAS_TEXTUREGEN:
+        pipe.update(offload.extract_models("texgen_worker", texgen_worker))
+        texgen_worker.models["multiview_model"].pipeline.vae.use_slicing = True
+    if HAS_T2I:
+        pipe.update(offload.extract_models("t2i_worker", t2i_worker))
+
+    if profile < 5:
+        kwargs["pinnedMemory"] = "i23d_worker/model"
+    if profile != 1 and profile != 3:
+        kwargs["budgets"] = {"*": 2200}
+    offload.default_verboseLevel = verboseLevel = int(args.verbose)
+    offload.profile(pipe, profile_no=profile, verboseLevel=int(args.verbose), **kwargs)
 
     # https://discuss.huggingface.co/t/how-to-serve-an-html-file/33921/2
     # create a FastAPI app

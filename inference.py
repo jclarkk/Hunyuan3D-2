@@ -8,10 +8,13 @@ import argparse
 import os
 import sys
 import time
-import torch
-from PIL import Image
 from uuid import uuid4
 
+import torch
+from PIL import Image
+from mmgp import offload
+
+from hy3dgen.mmgp_utils import replace_property_getter
 from hy3dgen.rmbg import RMBGRemover
 from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline, FaceReducer, FloaterRemover, DegenerateFaceRemover, \
     MeshlibCleaner
@@ -81,6 +84,27 @@ def run(args):
     t2 = time.time()
     print('3D DiT pipeline loaded. Took {:.2f} seconds'.format(t2 - t1))
 
+    # Handle MMGP offloading
+    profile = args.profile
+    kwargs = {}
+
+    replace_property_getter(mesh_pipeline, "_execution_device", lambda self: "cuda")
+    pipe = offload.extract_models("i23d_worker", mesh_pipeline)
+
+    if args.texture:
+        texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2',
+                                                                  mv_model=args.mv_model,
+                                                                  use_delight=args.use_delight)
+        pipe.update(offload.extract_models("texgen_worker", texture_pipeline))
+        texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
+
+    if profile < 5:
+        kwargs["pinnedMemory"] = "i23d_worker/model"
+    if profile != 1 and profile != 3:
+        kwargs["budgets"] = {"*": 2200}
+
+    offload.profile(pipe, profile_no=profile, verboseLevel=args.verbose, **kwargs)
+
     # Generate mesh
     mesh = mesh_pipeline(image=image,
                          num_inference_steps=steps,
@@ -105,12 +129,6 @@ def run(args):
         # Reload image to use maximum possible resolution for texture model
         image = Image.open(image_path)
         t5 = time.time()
-        texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2',
-                                                                  mv_model=args.mv_model,
-                                                                  use_delight=args.use_delight)
-        if args.low_vram_mode:
-            texture_pipeline.enable_model_cpu_offload()
-            texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
         print('3D Paint pipeline loaded')
         mesh = texture_pipeline(mesh, image, unwrap_method=args.unwrap_method, seed=args.seed)
         t6 = time.time()
@@ -152,10 +170,11 @@ if __name__ == "__main__":
                         help='UV unwrap method. Must be either "xatlas", "open3d" or "bpy"', default='xatlas')
     parser.add_argument('--face_count', type=int, default=100000, help='Maximum face count for the mesh')
     parser.add_argument('--texture', action='store_true', help='Texture the mesh', default=False)
+    parser.add_argument('--resolution', type=int, default=1024, help='Input image resolution (height and width)')
     parser.add_argument('--use_delight', action='store_true', help='Use Delight model', default=False)
     parser.add_argument('--mv_model', type=str, default='hunyuan3d-paint-v2-0', help='Multiview model to use')
-    parser.add_argument('--low_vram_mode', action='store_true')
-    parser.add_argument('--resolution', type=int, default=1024, help='Input image resolution (height and width)')
+    parser.add_argument('--profile', type=int, default=1)
+    parser.add_argument('--verbose', type=int, default=1)
 
     args = parser.parse_args()
 

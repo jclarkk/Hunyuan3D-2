@@ -45,7 +45,7 @@ class Multiview_Diffusion_Net():
             # pipeline.prepare() 
 
         pipeline.set_progress_bar_config(disable=True)
-        self.pipeline = pipeline.to(self.device)
+        self.pipeline = pipeline #.to(self.device)
 
     def seed_everything(self, seed):
         random.seed(seed)

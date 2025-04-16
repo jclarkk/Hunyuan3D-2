@@ -36,8 +36,8 @@ class MVAdapterPipelineWrapper:
         pipe.init_custom_adapter(num_views=6, self_attn_processor=DecoupledMVRowColSelfAttnProcessor2_0)
 
         pipe.load_custom_adapter('huanngzh/mv-adapter', weight_name="mvadapter_ig2mv_sdxl.safetensors")
-        pipe.cond_encoder.to(device=device, dtype=torch.float16)
-        pipe.to(device=device, dtype=torch.float16)
+        # pipe.cond_encoder.to(device=device, dtype=torch.float16)
+        # pipe.to(device=device, dtype=torch.float16)
         return cls(pipe, device=device)
 
     def __init__(self, pipeline: MVAdapterI2MVSDXLPipeline, device: str):
@@ -225,6 +225,9 @@ class MVAdapterPipelineWrapper:
             lora_scale: Scale for LoRA if used
             save_debug_images: Whether to save intermediate images for debugging
         """
+        self.pipeline.cond_encoder.to(device='cuda', dtype=torch.float16)
+        self.pipeline.to(device='cuda', dtype=torch.float16)
+
         # Prepare reference image
         if isinstance(image_prompt, str):
             reference_image = Image.open(image_prompt)
