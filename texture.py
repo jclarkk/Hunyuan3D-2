@@ -55,10 +55,12 @@ def run(args):
 
     t2 = time.time()
     # Load models
-    t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled')
+    t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled',
+                                      local_files_only=args.local_files_only)
     texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2',
                                                               mv_model=args.mv_model,
-                                                              use_delight=args.use_delight)
+                                                              use_delight=args.use_delight,
+                                                              local_files_only=args.local_files_only)
 
     # Handle MMGP offloading
     profile = args.profile
@@ -76,7 +78,8 @@ def run(args):
 
     t2i_pipeline = None
     if args.prompt is not None:
-        t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled')
+        t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled',
+                                          local_files_only=args.local_files_only)
 
     t3 = time.time()
     print(f"Model loading took {t3 - t2:.2f} seconds")
@@ -96,7 +99,7 @@ def run(args):
     processed_images = []
     if args.mv_model == 'hunyuan3d-paint-v2-0':
         for image in images:
-            rmbg_remover = RMBGRemover()
+            rmbg_remover = RMBGRemover(local_files_only=args.local_files_only)
             image = rmbg_remover(image)
             processed_images.append(image)
     else:
@@ -135,6 +138,7 @@ def run(args):
 if __name__ == "__main__":
     # Parse arguments and then call run
     parser = argparse.ArgumentParser()
+    parser.add_argument('--local_files_only', action='store_true', help='Use local models only')
     parser.add_argument('--image_paths', type=str, nargs='+', default=None,
                         help='Path to input images. Can specify multiple paths separated by spaces')
     parser.add_argument('--prompt', type=str, default=None, help='Prompt for the image')

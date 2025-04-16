@@ -6,6 +6,10 @@ from transformers import AutoModelForImageSegmentation
 
 
 class RMBGRemover:
+
+    def __init__(self, local_files_only=False):
+        self.local_files_only = local_files_only
+
     def __call__(self, input: Image.Image, height=518, width=518,
                  background_color: list[float] = [1.0, 1.0, 1.0]) -> Image.Image:
         """
@@ -19,7 +23,9 @@ class RMBGRemover:
             if not np.all(alpha == 255):
                 has_alpha = True
         if not has_alpha:
-            model = AutoModelForImageSegmentation.from_pretrained('briaai/RMBG-2.0', trust_remote_code=True)
+            model = AutoModelForImageSegmentation.from_pretrained('briaai/RMBG-2.0',
+                                                                  trust_remote_code=True,
+                                                                  local_files_only=self.local_files_only)
             torch.set_float32_matmul_precision(['high', 'highest'][0])
             model.to('cuda')
             model.eval()

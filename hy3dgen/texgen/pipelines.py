@@ -65,7 +65,7 @@ class Hunyuan3DTexGenConfig:
 
 class Hunyuan3DPaintPipeline:
     @classmethod
-    def from_pretrained(cls, model_path, mv_model='hunyuan3d-paint-v2-0', use_delight=False):
+    def from_pretrained(cls, model_path, mv_model='hunyuan3d-paint-v2-0', use_delight=False, local_files_only=False):
         original_model_path = model_path
         if not os.path.exists(model_path):
             # try local path
@@ -88,21 +88,24 @@ class Hunyuan3DPaintPipeline:
                     )
                     raise RuntimeError(f"Model path {model_path} not found")
 
-            return cls(Hunyuan3DTexGenConfig(delight_model_path, multiview_model_path,
-                                             mv_model=mv_model, use_delight=use_delight))
+            return cls(Hunyuan3DTexGenConfig(delight_model_path,
+                                             multiview_model_path,
+                                             mv_model=mv_model,
+                                             use_delight=use_delight,
+                                             ), local_files_only=local_files_only)
 
         raise FileNotFoundError(f"Model path {original_model_path} not found and we could not find it at huggingface")
 
-    def __init__(self, config):
+    def __init__(self, config, local_files_only=False):
         self.config = config
         self.models = {}
         self.render = MeshRender(
             default_resolution=self.config.render_size,
             texture_size=self.config.texture_size)
 
-        self.load_models()
+        self.load_models(local_files_only=local_files_only)
 
-    def load_models(self):
+    def load_models(self, local_files_only=False):
         # empty cuda cache
         torch.cuda.empty_cache()
         # Load model
@@ -111,9 +114,10 @@ class Hunyuan3DPaintPipeline:
             print('Delight model loaded')
         print(f'Loading multiview model: {self.config.mv_model}')
         if self.config.mv_model == 'hunyuan3d-paint-v2-0' or self.config.mv_model == 'hunyuan3d-paint-v2-0-turbo':
-            self.models['multiview_model'] = Multiview_Diffusion_Net(self.config)
+            self.models['multiview_model'] = Multiview_Diffusion_Net(self.config, local_files_only=local_files_only)
         elif self.config.mv_model == 'mv-adapter':
-            self.models['multiview_model'] = MVAdapterPipelineWrapper.from_pretrained(device=self.config.device)
+            self.models['multiview_model'] = MVAdapterPipelineWrapper.from_pretrained(device=self.config.device,
+                                                                                      local_files_only=local_files_only)
         print('Multiview model loaded')
 
     def enable_model_cpu_offload(self, gpu_id: Optional[int] = None, device: Union[torch.device, str] = "cuda"):

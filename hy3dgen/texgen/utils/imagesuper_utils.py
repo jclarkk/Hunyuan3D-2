@@ -16,14 +16,16 @@ import torch
 from diffusers import StableDiffusionUpscalePipeline
 
 class Image_Super_Net():
-    def __init__(self, device):
+    def __init__(self, local_files_only=False):
         self.up_pipeline_x4 = StableDiffusionUpscalePipeline.from_pretrained(
                         'stabilityai/stable-diffusion-x4-upscaler',
                         torch_dtype=torch.float16,
-                    ).to(device)
+                        local_files_only=local_files_only
+                    )
         self.up_pipeline_x4.set_progress_bar_config(disable=True)
 
     def __call__(self, image, prompt=''):
+        self.up_pipeline_x4.to('cuda')
         with torch.no_grad():
             upscaled_image = self.up_pipeline_x4(
                 prompt=[prompt],

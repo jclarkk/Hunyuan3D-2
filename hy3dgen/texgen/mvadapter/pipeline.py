@@ -19,14 +19,14 @@ class MVAdapterPipelineWrapper:
     """
 
     @classmethod
-    def from_pretrained(cls, base_model: str = "lykon/dreamshaper-xl-v2-turbo", device: str = "cuda"):
+    def from_pretrained(cls, base_model: str = "lykon/dreamshaper-xl-v2-turbo", device: str = "cuda", local_files_only=False):
         """
         Initialize the MV-Adapter pipeline from pretrained weights without specifying num_views.
         """
         pipe_kwargs = {
-            'vae': AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix"),
+            'vae': AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", local_files_only=local_files_only),
         }
-        pipe = MVAdapterI2MVSDXLPipeline.from_pretrained(base_model, **pipe_kwargs)
+        pipe = MVAdapterI2MVSDXLPipeline.from_pretrained(base_model, local_files_only=local_files_only, **pipe_kwargs)
         pipe.scheduler = ShiftSNRScheduler.from_scheduler(
             pipe.scheduler,
             shift_mode="interpolated",
@@ -35,7 +35,7 @@ class MVAdapterPipelineWrapper:
         )
         pipe.init_custom_adapter(num_views=6, self_attn_processor=DecoupledMVRowColSelfAttnProcessor2_0)
 
-        pipe.load_custom_adapter('huanngzh/mv-adapter', weight_name="mvadapter_ig2mv_sdxl.safetensors")
+        pipe.load_custom_adapter('huanngzh/mv-adapter', weight_name="mvadapter_ig2mv_sdxl.safetensors", local_files_only=local_files_only)
         # pipe.cond_encoder.to(device=device, dtype=torch.float16)
         # pipe.to(device=device, dtype=torch.float16)
         return cls(pipe, device=device)

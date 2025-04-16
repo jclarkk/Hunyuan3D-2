@@ -23,7 +23,7 @@ from diffusers import EulerAncestralDiscreteScheduler, LCMScheduler
 
 
 class Multiview_Diffusion_Net():
-    def __init__(self, config) -> None:
+    def __init__(self, config, local_files_only=False) -> None:
         self.device = config.device
         self.view_size = 512
         multiview_ckpt_path = config.multiview_ckpt_path
@@ -33,7 +33,7 @@ class Multiview_Diffusion_Net():
 
         pipeline = DiffusionPipeline.from_pretrained(
             multiview_ckpt_path,
-            custom_pipeline=custom_pipeline_path, torch_dtype=torch.float16)
+            custom_pipeline=custom_pipeline_path, torch_dtype=torch.float16, local_files_only=local_files_only)
 
         if config.pipe_name in ['hunyuanpaint']:
             pipeline.scheduler = EulerAncestralDiscreteScheduler.from_config(pipeline.scheduler.config,

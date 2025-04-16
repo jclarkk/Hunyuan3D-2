@@ -205,6 +205,7 @@ class Hunyuan3DDiTPipeline:
         use_safetensors=True,
         variant='fp16',
         subfolder='hunyuan3d-dit-v2-0',
+        local_files_only=False,
         **kwargs,
     ):
         kwargs['from_pretrained_kwargs'] = dict(
@@ -214,6 +215,7 @@ class Hunyuan3DDiTPipeline:
             variant=variant,
             dtype=dtype,
             device=device,
+            local_files_only=local_files_only
         )
         if config_path is None:
             config_path, ckpt_path = smart_load_model(

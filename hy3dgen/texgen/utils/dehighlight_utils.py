@@ -20,7 +20,7 @@ from diffusers import StableDiffusionInstructPix2PixPipeline, EulerAncestralDisc
 
 
 class Light_Shadow_Remover():
-    def __init__(self, config):
+    def __init__(self, config, local_files_only=False):
         self.device = config.device
         self.cfg_image = 1.5
         self.cfg_text = 1.0
@@ -29,6 +29,7 @@ class Light_Shadow_Remover():
             config.light_remover_ckpt_path,
             torch_dtype=torch.float16,
             safety_checker=None,
+            local_files_only=local_files_only
         )
         pipeline.scheduler = EulerAncestralDiscreteScheduler.from_config(pipeline.scheduler.config)
         pipeline.set_progress_bar_config(disable=True)

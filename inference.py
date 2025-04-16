@@ -60,7 +60,8 @@ def run(args):
             use_safetensors=True,
             subfolder='hunyuan3d-dit-v2-0-turbo',
             variant='fp16',
-            device=args.device
+            device=args.device,
+            local_files_only=args.local_files_only
         )
     elif args.geo_model == 'hunyuan3d-dit-v2-mini-turbo':
         mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
@@ -69,7 +70,8 @@ def run(args):
             use_safetensors=True,
             subfolder='hunyuan3d-dit-v2-mini-turbo',
             variant='fp16',
-            device=args.device
+            device=args.device,
+            local_files_only=args.local_files_only
         )
         # In this pipeline we might get holes sometimes
         fix_holes = True
@@ -77,7 +79,8 @@ def run(args):
         mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
             'tencent/Hunyuan3D-2',
             use_safetensors=True,
-            device=args.device
+            device=args.device,
+            local_files_only=args.local_files_only
         )
     mesh_pipeline.enable_flashvdm(mc_algo=mc_algo)
 
@@ -94,7 +97,8 @@ def run(args):
     if args.texture:
         texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2',
                                                                   mv_model=args.mv_model,
-                                                                  use_delight=args.use_delight)
+                                                                  use_delight=args.use_delight,
+                                                                  local_files_only=args.local_files_only)
         pipe.update(offload.extract_models("texgen_worker", texture_pipeline))
         texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
 
@@ -153,6 +157,7 @@ def run(args):
 if __name__ == "__main__":
     # Parse arguments and then call run
     parser = argparse.ArgumentParser()
+    parser.add_argument('--local_files_only', action='store_true', help='Use local models only')
     parser.add_argument('--image_paths', type=str, nargs='+', required=True,
                         help='Path to input images. Can specify multiple paths separated by spaces')
     parser.add_argument('--output_dir', type=str, default='./output', help='Path to output directory')
