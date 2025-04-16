@@ -377,8 +377,6 @@ def shape_generation(
 
     path = export_mesh(mesh, save_folder, textured=False)
     model_viewer_html = build_model_viewer_html(save_folder, height=HTML_HEIGHT, width=HTML_WIDTH)
-    if args.low_vram_mode:
-        torch.cuda.empty_cache()
     return (
         gr.update(value=path),
         model_viewer_html,
@@ -756,13 +754,6 @@ if __name__ == '__main__':
 
             texgen_worker = Hunyuan3DPaintPipeline.from_pretrained(args.texgen_model_path, mv_model=args.mv_model,
                                                                    use_delight=args.use_delight)
-            if args.low_vram_mode:
-                texgen_worker.enable_model_cpu_offload()
-                if 'hunyuan3d-paint' in args.mv_model:
-                    texgen_worker.models["multiview_model"].pipeline.vae.use_slicing = True
-                    texgen_worker.models["multiview_model"].pipeline.enable_attention_slicing()
-                    texgen_worker.models["multiview_model"].pipeline.enable_vae_slicing()
-                    texgen_worker.models["multiview_model"].pipeline.enable_vae_tiling()
             # Not help much, ignore for now.
             # if args.compile:
             #     texgen_worker.models['delight_model'].pipeline.unet.compile()
@@ -776,7 +767,7 @@ if __name__ == '__main__':
             print('Please try to install requirements by following README.md')
             HAS_TEXTUREGEN = False
 
-    HAS_T2I = True
+    HAS_T2I = False
     if args.enable_t23d:
         from hy3dgen.text2image import HunyuanDiTPipeline
 
@@ -830,8 +821,6 @@ if __name__ == '__main__':
     app.mount("/static", StaticFiles(directory=static_dir, html=True), name="static")
     shutil.copytree('./assets/env_maps', os.path.join(static_dir, 'env_maps'), dirs_exist_ok=True)
 
-    if args.low_vram_mode:
-        torch.cuda.empty_cache()
     demo = build_app()
     app = gr.mount_gradio_app(app, demo, path="/")
     uvicorn.run(app, host=args.host, port=args.port, workers=1)
