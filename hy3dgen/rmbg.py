@@ -23,7 +23,7 @@ class RMBGRemover:
             if not np.all(alpha == 255):
                 has_alpha = True
         if not has_alpha:
-            model = AutoModelForImageSegmentation.from_pretrained('briaai/RMBG-2.0',
+            model = AutoModelForImageSegmentation.from_pretrained('ZhengPeng7/BiRefNet_HR',
                                                                   trust_remote_code=True,
                                                                   local_files_only=self.local_files_only)
             torch.set_float32_matmul_precision(['high', 'highest'][0])

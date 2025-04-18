@@ -5,8 +5,9 @@ diffusers
 einops
 opencv-python
 numpy
+safetensors==0.4.2
 torch
-transformers
+transformers==4.49.0
 torchvision
 #taming-transformers-rom1504
 #ConfigArgParse
