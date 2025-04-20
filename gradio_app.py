@@ -707,7 +707,7 @@ if __name__ == '__main__':
     parser.add_argument('--port', type=int, default=8080)
     parser.add_argument('--host', type=str, default='0.0.0.0')
     parser.add_argument('--device', type=str, default='cuda')
-    parser.add_argument('--mc_algo', type=str, default='mc')
+    parser.add_argument('--mc_algo', type=str, default='dmc')
     parser.add_argument('--cache-path', type=str, default='gradio_cache')
     parser.add_argument('--enable_t23d', action='store_true')
     parser.add_argument('--disable_tex', action='store_true')
@@ -781,9 +781,9 @@ if __name__ == '__main__':
 
     from hy3dgen.shapegen import FaceReducer, FloaterRemover, DegenerateFaceRemover, Hunyuan3DDiTFlowMatchingPipeline
     from hy3dgen.shapegen.pipelines import export_to_trimesh
-    from hy3dgen.rembg import BackgroundRemover
+    from hy3dgen.rmbg import RMBGRemover
 
-    rmbg_worker = BackgroundRemover()
+    rmbg_worker = RMBGRemover()
     i23d_worker = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
         args.model_path,
         subfolder=args.subfolder,

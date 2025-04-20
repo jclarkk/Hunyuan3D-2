@@ -56,22 +56,40 @@ class RMBGRemover:
         # Ensure the image is in RGBA mode before accessing the alpha channel
         if output.mode != 'RGBA':
             output = output.convert('RGBA')
-        alpha = output_np[:, :, 3]
-        bbox = np.argwhere(alpha > 0.8 * 255)
-        bbox = np.min(bbox[:, 1]), np.min(bbox[:, 0]), np.max(bbox[:, 1]), np.max(bbox[:, 0])
-        center = (bbox[0] + bbox[2]) / 2, (bbox[1] + bbox[3]) / 2
-        size = max(bbox[2] - bbox[0], bbox[3] - bbox[1])
-        size = int(size * 1.2)
-        bbox = center[0] - size // 2, center[1] - size // 2, center[0] + size // 2, center[1] + size // 2
-        output = output.crop(bbox)  # type: ignore
-        output = output.resize((height, width), Image.Resampling.LANCZOS)
+        W, H = output.size
+        alpha = np.array(output)[:, :, 3]
+
+        ys, xs = np.where(alpha > 0.8 * 255)
+        if xs.size == 0 or ys.size == 0:
+            return output.convert('RGB')
+
+        pad_px = 8
+        x0 = max(xs.min() - pad_px, 0)
+        y0 = max(ys.min() - pad_px, 0)
+        x1 = min(xs.max() + pad_px, W - 1)
+        y1 = min(ys.max() + pad_px, H - 1)
+
+        cropped = output.crop((x0, y0, x1, y1))
+
+        short_side = max(cropped.size)
+        square = Image.new('RGBA', (short_side, short_side), (0, 0, 0, 0))
+        off_x = (short_side - cropped.width)  // 2
+        off_y = (short_side - cropped.height) // 2
+        square.alpha_composite(cropped, (off_x, off_y))
+
+        target = 1024
+        scale = target / short_side
+        new_w  = int(round(cropped.width  * scale))
+        new_h  = int(round(cropped.height * scale))
+
+        resized = cropped.resize((new_w, new_h), Image.Resampling.LANCZOS)
+
+        canvas = Image.new('RGBA', (target, target), (0, 0, 0, 0))
+        canvas.alpha_composite(resized,
+                               ((target - new_w) // 2, (target - new_h) // 2))
 
         bg_rgb = tuple(int(c * 255) for c in background_color)
-        colored_bg = Image.new('RGBA', output.size, bg_rgb + (255,))
-        # Ensure output has alpha channel
-        if output.mode != 'RGBA':
-            output = output.convert('RGBA')
-        # Composite output onto colored background preserving alpha
-        colored_bg.alpha_composite(output)
+        bg = Image.new('RGBA', canvas.size, bg_rgb + (255,))
+        bg.alpha_composite(canvas)
 
-        return colored_bg
+        return bg
