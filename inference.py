@@ -87,27 +87,30 @@ def run(args):
     t2 = time.time()
     print('3D DiT pipeline loaded. Took {:.2f} seconds'.format(t2 - t1))
 
-    # Handle MMGP offloading
-    profile = args.profile
-    kwargs = {}
+    if args.use_mmgp:
+        # Handle MMGP offloading
+        profile = args.profile
+        kwargs = {}
 
-    replace_property_getter(mesh_pipeline, "_execution_device", lambda self: "cuda")
-    pipe = offload.extract_models("i23d_worker", mesh_pipeline)
+        replace_property_getter(mesh_pipeline, "_execution_device", lambda self: "cuda")
+        pipe = offload.extract_models("i23d_worker", mesh_pipeline)
 
     if args.texture:
         texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2',
                                                                   mv_model=args.mv_model,
                                                                   use_delight=args.use_delight,
                                                                   local_files_only=args.local_files_only)
-        pipe.update(offload.extract_models("texgen_worker", texture_pipeline))
+        if args.use_mmgp:
+            pipe.update(offload.extract_models("texgen_worker", texture_pipeline))
         texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
 
-    if profile < 5:
-        kwargs["pinnedMemory"] = "i23d_worker/model"
-    if profile != 1 and profile != 3:
-        kwargs["budgets"] = {"*": 2200}
+    if args.use_mmgp:
+        if profile < 5:
+            kwargs["pinnedMemory"] = "i23d_worker/model"
+        if profile != 1 and profile != 3:
+            kwargs["budgets"] = {"*": 2200}
 
-    offload.profile(pipe, profile_no=profile, verboseLevel=args.verbose, **kwargs)
+        offload.profile(pipe, profile_no=profile, verboseLevel=args.verbose, **kwargs)
 
     # Generate mesh
     mesh = mesh_pipeline(image=image,
@@ -178,6 +181,7 @@ if __name__ == "__main__":
     parser.add_argument('--resolution', type=int, default=1024, help='Input image resolution (height and width)')
     parser.add_argument('--use_delight', action='store_true', help='Use Delight model', default=False)
     parser.add_argument('--mv_model', type=str, default='hunyuan3d-paint-v2-0', help='Multiview model to use')
+    parser.add_argument('--use_mmgp', action='store_true', help='Use MMGP for offloading', default=False)
     parser.add_argument('--profile', type=int, default=1)
     parser.add_argument('--verbose', type=int, default=1)
 

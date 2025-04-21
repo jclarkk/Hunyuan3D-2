@@ -137,7 +137,7 @@ class Hunyuan3DDiTPipeline:
         cls,
         ckpt_path,
         config_path,
-        device='cpu',
+        device='cuda',
         dtype=torch.float16,
         use_safetensors=None,
         **kwargs,

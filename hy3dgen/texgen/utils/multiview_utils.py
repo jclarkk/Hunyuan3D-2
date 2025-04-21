@@ -45,7 +45,10 @@ class Multiview_Diffusion_Net():
             # pipeline.prepare() 
 
         pipeline.set_progress_bar_config(disable=True)
-        self.pipeline = pipeline #.to(self.device)
+        if config.device == 'cuda':
+            self.pipeline = pipeline.to(self.device)
+        else:
+            self.pipeline = pipeline
 
     def seed_everything(self, seed):
         random.seed(seed)

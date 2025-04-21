@@ -65,7 +65,7 @@ class Hunyuan3DTexGenConfig:
 
 class Hunyuan3DPaintPipeline:
     @classmethod
-    def from_pretrained(cls, model_path, mv_model='hunyuan3d-paint-v2-0', use_delight=False, local_files_only=False):
+    def from_pretrained(cls, model_path, mv_model='hunyuan3d-paint-v2-0', use_delight=False, local_files_only=False, device='cuda'):
         original_model_path = model_path
         if not os.path.exists(model_path):
             # try local path
@@ -92,6 +92,7 @@ class Hunyuan3DPaintPipeline:
                                              multiview_model_path,
                                              mv_model=mv_model,
                                              use_delight=use_delight,
+                                             device=device
                                              ), local_files_only=local_files_only)
 
         raise FileNotFoundError(f"Model path {original_model_path} not found and we could not find it at huggingface")

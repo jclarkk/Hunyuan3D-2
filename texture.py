@@ -56,29 +56,32 @@ def run(args):
     t2 = time.time()
     # Load models
     t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled',
-                                      local_files_only=args.local_files_only)
+                                      local_files_only=args.local_files_only,
+                                      device='cpu' if args.use_mmgp else 'cuda')
     texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2',
                                                               mv_model=args.mv_model,
                                                               use_delight=args.use_delight,
-                                                              local_files_only=args.local_files_only)
+                                                              local_files_only=args.local_files_only,
+                                                              device='cpu' if args.use_mmgp else 'cuda')
 
     # Handle MMGP offloading
-    profile = args.profile
-    kwargs = {}
+    if args.use_mmgp:
+        profile = args.profile
+        kwargs = {}
+        pipe = offload.extract_models("t2i_worker", t2i_pipeline)
+        pipe.update(offload.extract_models("texgen_worker", texture_pipeline))
+        texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
 
-    pipe = offload.extract_models("t2i_worker", t2i_pipeline)
-    pipe.update(offload.extract_models("texgen_worker", texture_pipeline))
-    texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
+        if profile != 1 and profile != 3:
+            kwargs["budgets"] = {"*": 2200}
 
-    if profile != 1 and profile != 3:
-        kwargs["budgets"] = {"*": 2200}
-
-    offload.profile(pipe, profile_no=profile, verboseLevel=args.verbose, **kwargs)
+        offload.profile(pipe, profile_no=profile, verboseLevel=args.verbose, **kwargs)
     print('3D Paint pipeline loaded')
 
     t2i_pipeline = None
     if args.prompt is not None:
         t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled',
+                                          device='cpu' if args.use_mmgp else 'cuda',
                                           local_files_only=args.local_files_only)
 
     t3 = time.time()
@@ -156,6 +159,7 @@ if __name__ == "__main__":
     parser.add_argument('--enhance_texture_angles', action='store_true', help='Enhance texture angles', default=False)
     parser.add_argument('--pbr', action='store_true', help='Generate PBR textures', default=False)
     parser.add_argument('--debug', action='store_true', help='Debug mode', default=False)
+    parser.add_argument('--use_mmgp', action='store_true', help='Use MMGP for offloading', default=False)
     parser.add_argument('--profile', type=int, default=3)
     parser.add_argument('--verbose', type=int, default=1)
 
