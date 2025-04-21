@@ -19,26 +19,44 @@ class MVAdapterPipelineWrapper:
     """
 
     @classmethod
-    def from_pretrained(cls, base_model: str = "lykon/dreamshaper-xl-v2-turbo", device: str = "cuda", local_files_only=False):
-        """
-        Initialize the MV-Adapter pipeline from pretrained weights without specifying num_views.
-        """
+    def from_pretrained(
+            cls,
+            base_model: str = "lykon/dreamshaper-xl-v2-turbo",
+            device: str = "cuda",
+            local_files_only: bool = False,
+    ):
+        common_kwargs = dict(
+            torch_dtype=torch.float16,
+            variant="fp16",
+            device_map="auto",
+            low_cpu_mem_usage=True,
+            local_files_only=local_files_only,
+        )
+
         pipe_kwargs = {
-            'vae': AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", local_files_only=local_files_only),
+            "vae": AutoencoderKL.from_pretrained(
+                "madebyollin/sdxl-vae-fp16-fix", **common_kwargs
+            )
         }
-        pipe = MVAdapterI2MVSDXLPipeline.from_pretrained(base_model, local_files_only=local_files_only, **pipe_kwargs)
+
+        pipe = MVAdapterI2MVSDXLPipeline.from_pretrained(base_model, **common_kwargs, **pipe_kwargs)
+
+        pipe.safety_checker = None
+
         pipe.scheduler = ShiftSNRScheduler.from_scheduler(
-            pipe.scheduler,
-            shift_mode="interpolated",
-            shift_scale=8.0,
-            scheduler_class=None
+            pipe.scheduler, shift_mode="interpolated", shift_scale=8.0
         )
         pipe.init_custom_adapter(num_views=6, self_attn_processor=DecoupledMVRowColSelfAttnProcessor2_0)
+        pipe.load_custom_adapter(
+            "huanngzh/mv-adapter",
+            weight_name="mvadapter_ig2mv_sdxl.safetensors",
+            torch_dtype=torch.float16,
+            local_files_only=local_files_only,
+        )
 
-        pipe.load_custom_adapter('huanngzh/mv-adapter', weight_name="mvadapter_ig2mv_sdxl.safetensors", local_files_only=local_files_only)
-        if device == 'cuda':
-            pipe.cond_encoder.to(device=device, dtype=torch.float16)
-            pipe.to(device=device, dtype=torch.float16)
+        if device == "cuda":
+            pipe.to(device, dtype=torch.float16)
+
         return cls(pipe, device=device)
 
     def __init__(self, pipeline: MVAdapterI2MVSDXLPipeline, device: str):
