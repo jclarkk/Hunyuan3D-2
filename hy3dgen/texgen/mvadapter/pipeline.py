@@ -27,17 +27,15 @@ class MVAdapterPipelineWrapper:
     ):
         common_kwargs = dict(
             torch_dtype=torch.float16,
-            variant="fp16",
-            device_map="auto",
             low_cpu_mem_usage=True,
             local_files_only=local_files_only,
         )
 
         pipe_kwargs = {
-            "vae": AutoencoderKL.from_pretrained(
-                "madebyollin/sdxl-vae-fp16-fix", **common_kwargs
-            )
+            "vae": AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", **common_kwargs)
         }
+
+        common_kwargs['device_map='] = 'auto'
 
         pipe = MVAdapterI2MVSDXLPipeline.from_pretrained(base_model, **common_kwargs, **pipe_kwargs)
 
