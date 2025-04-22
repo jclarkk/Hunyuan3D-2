@@ -19,7 +19,6 @@ from typing import Union
 import numpy as np
 import pymeshlab
 import torch
-import pynanoinstantmeshes as PyNIM
 import trimesh
 
 from .models.autoencoders import Latent2MeshOutput
@@ -276,6 +275,7 @@ class FaceReducer:
         mesh = reduce_face_with_meshlib(mesh, max_facenum)
 
         if remesh_method is not None and remesh_method == "im":
+            import pynanoinstantmeshes as PyNIM
             vertices, faces = PyNIM.remesh(
                 np.array(mesh.vertices, dtype=np.float32),
                 np.array(mesh.faces, dtype=np.uint32),

@@ -1,7 +1,3 @@
-import time
-
-import_t0 = time.time()
-
 import argparse
 import os
 import time
@@ -11,14 +7,10 @@ import torch
 from PIL import Image
 from mmgp import offload
 
-from hy3dgen.mmgp_utils import replace_property_getter
 from hy3dgen.rmbg import RMBGRemover
 from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline, FaceReducer, FloaterRemover, DegenerateFaceRemover, \
     MeshlibCleaner
-from hy3dgen.texgen import Hunyuan3DPaintPipeline
 
-import_t1 = time.time()
-print('Imports took {:.2f} seconds'.format(import_t1 - import_t0))
 
 def run(args):
     if args.face_count > 100000:
@@ -87,6 +79,7 @@ def run(args):
     print('3D DiT pipeline loaded. Took {:.2f} seconds'.format(t2 - t1))
 
     if args.use_mmgp:
+        from hy3dgen.mmgp_utils import replace_property_getter
         # Handle MMGP offloading
         profile = args.profile
         kwargs = {}
@@ -95,6 +88,7 @@ def run(args):
         pipe = offload.extract_models("i23d_worker", mesh_pipeline)
 
     if args.texture:
+        from hy3dgen.texgen import Hunyuan3DPaintPipeline
         texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2',
                                                                   mv_model=args.mv_model,
                                                                   use_delight=args.use_delight,
@@ -186,4 +180,3 @@ if __name__ == "__main__":
     run(args)
     t1 = time.time()
     print(f"Run time taken: {t1 - t0:.2f} seconds")
-    print(f"Total time taken: {t1 - import_t0:.2f} seconds")
