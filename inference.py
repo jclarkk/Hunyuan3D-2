@@ -38,7 +38,7 @@ def run(args):
 
     # Preprocess the image
     image = Image.open(image_path)
-    rmbg_remover = RMBGRemover()
+    rmbg_remover = RMBGRemover(local_files_only=args.local_files_only)
     image = rmbg_remover(image, height=args.resolution, width=args.resolution)
 
     processed_image_name = os.path.basename(image_path).split('.')[0] + '_input.png'
