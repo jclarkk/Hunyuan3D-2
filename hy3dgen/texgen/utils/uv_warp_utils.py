@@ -5,6 +5,7 @@
 # Users must comply with all terms and conditions of original licenses of these third-party
 # components and must ensure that the usage of the third party components adheres to
 # all relevant laws and regulations.
+import os
 
 # For avoidance of doubts, Hunyuan 3D means the large language models and
 # their software and algorithms, including trained model weights, parameters (including
@@ -64,7 +65,16 @@ def open3d_mesh_uv_wrap(mesh, gutter_size=2.0, max_stretch=0.06, resolution=1024
         o3d_mesh.vertex.positions = o3d.core.Tensor(mesh.vertices)
         o3d_mesh.triangle.indices = o3d.core.Tensor(mesh.faces)
 
-        o3d_mesh.compute_uvatlas(size=resolution, parallel_partitions=4, gutter=gutter_size, max_stretch=max_stretch)
+        core_count = os.cpu_count()
+        print('Using Open3D for UV unwrapping with {} cores'.format(core_count))
+
+        o3d_mesh.compute_uvatlas(
+            size=resolution,
+            parallel_partitions=4,
+            gutter=gutter_size,
+            max_stretch=max_stretch,
+            n_threads=core_count
+        )
 
         new_v = mesh.vertices[mesh.faces.reshape(-1)]
         new_f = np.arange(len(new_v)).reshape(-1, 3)
