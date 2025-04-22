@@ -3,10 +3,12 @@ try:
     import bpy
 except ImportError:
     pass
+import time
+
+import_t0 = time.time()
 
 import argparse
 import os
-import sys
 import time
 from uuid import uuid4
 
@@ -20,6 +22,8 @@ from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline, FaceReducer, Floa
     MeshlibCleaner
 from hy3dgen.texgen import Hunyuan3DPaintPipeline
 
+import_t1 = time.time()
+print('Imports took {:.2f} seconds'.format(import_t1 - import_t0))
 
 def run(args):
     if args.face_count > 100000:
@@ -186,4 +190,5 @@ if __name__ == "__main__":
     t0 = time.time()
     run(args)
     t1 = time.time()
-    print(f"Total time taken: {t1 - t0:.2f} seconds")
+    print(f"Run time taken: {t1 - t0:.2f} seconds")
+    print(f"Total time taken: {t1 - import_t0:.2f} seconds")
