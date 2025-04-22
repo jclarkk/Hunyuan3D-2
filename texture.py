@@ -4,12 +4,9 @@ import time
 
 import trimesh
 from PIL import Image
-from mmgp import offload
 
 from hy3dgen.rmbg import RMBGRemover
-from hy3dgen.shapegen.postprocessors import FaceReducer
 from hy3dgen.texgen import Hunyuan3DPaintPipeline
-from hy3dgen.text2image import HunyuanDiTPipeline
 
 
 def run(args):
@@ -36,6 +33,7 @@ def run(args):
 
     # Reduce face count
     if (args.remesh_method is not None and args.remesh_method != 'None') or len(mesh.faces) > 100000:
+        from hy3dgen.shapegen.postprocessors import FaceReducer
         mesh = FaceReducer()(mesh, remesh_method=args.remesh_method)
 
         # Check if face count is still too high
@@ -47,20 +45,25 @@ def run(args):
 
     t2 = time.time()
     # Load models
-    t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled',
-                                      local_files_only=args.local_files_only,
-                                      device='cpu' if args.use_mmgp else 'cuda')
     texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2',
                                                               mv_model=args.mv_model,
                                                               use_delight=args.use_delight,
                                                               local_files_only=args.local_files_only,
                                                               device='cpu' if args.use_mmgp else 'cuda')
 
+    t2i_pipeline = None
     # Handle MMGP offloading
     if args.use_mmgp:
+        from mmgp import offload
+
         profile = args.profile
         kwargs = {}
-        pipe = offload.extract_models("t2i_worker", t2i_pipeline)
+        if args.prompt is not None:
+            from hy3dgen.text2image import HunyuanDiTPipeline
+            t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled',
+                                              local_files_only=args.local_files_only,
+                                              device='cpu' if args.use_mmgp else 'cuda')
+            pipe = offload.extract_models("t2i_worker", t2i_pipeline)
         pipe.update(offload.extract_models("texgen_worker", texture_pipeline))
         texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
 
@@ -70,16 +73,16 @@ def run(args):
         offload.profile(pipe, profile_no=profile, verboseLevel=args.verbose, **kwargs)
     print('3D Paint pipeline loaded')
 
-    t2i_pipeline = None
-    if args.prompt is not None:
-        t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled',
-                                          device='cpu' if args.use_mmgp else 'cuda',
-                                          local_files_only=args.local_files_only)
-
     t3 = time.time()
     print(f"Model loading took {t3 - t2:.2f} seconds")
 
     if args.prompt is not None:
+        if t2i_pipeline is None:
+            from hy3dgen.text2image import HunyuanDiTPipeline
+            t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled',
+                                              local_files_only=args.local_files_only,
+                                              device='cpu' if args.use_mmgp else 'cuda')
+
         t2 = time.time()
         image = t2i_pipeline(args.prompt)
         images = [image]
