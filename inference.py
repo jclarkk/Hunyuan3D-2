@@ -1,8 +1,3 @@
-try:
-    # If using Blender's uv unwrap then we must initialize bpy
-    import bpy
-except ImportError:
-    pass
 import time
 
 import_t0 = time.time()

@@ -1,11 +1,3 @@
-from hy3dgen.mmgp_utils import replace_property_getter
-
-try:
-    # If using Blender's uv unwrap then we must initialize bpy
-    import bpy
-except ImportError:
-    pass
-
 import argparse
 import os
 import time
