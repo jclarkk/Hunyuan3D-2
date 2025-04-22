@@ -140,8 +140,6 @@ def run(args):
         mesh = texture_pipeline(mesh, image, unwrap_method=args.unwrap_method, seed=args.seed)
         t6 = time.time()
         print(f"Texture generation took {t6 - t5:.2f} seconds")
-    else:
-        t6 = t3
 
     os.makedirs(args.output_dir, exist_ok=True)
 
@@ -153,8 +151,6 @@ def run(args):
     mesh.export(os.path.join(args.output_dir, '{}.glb'.format(output_name)))
 
     print(f"Output saved to {args.output_dir}/{output_name}.glb")
-    print(f"Total time taken: {t6 - t0:.2f} seconds")
-    sys.stdout.flush()
 
 
 if __name__ == "__main__":
@@ -187,4 +183,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    t0 = time.time()
     run(args)
+    t1 = time.time()
+    print(f"Total time taken: {t1 - t0:.2f} seconds")
