@@ -23,13 +23,6 @@ import torch
 from PIL import Image
 
 from .differentiable_renderer.mesh_render import MeshRender
-from .mvadapter.pipeline import MVAdapterPipelineWrapper
-from .upscalers.pipelines import AuraSRUpscalerPipeline, InvSRUpscalerPipeline, FluxUpscalerPipeline, \
-    RealESRGANUpscalerPipeline
-from .utils.dehighlight_utils import Light_Shadow_Remover
-from .utils.imagesuper_utils import Image_Super_Net
-from .utils.multiview_utils import Multiview_Diffusion_Net
-from .utils.uv_warp_utils import mesh_uv_wrap, bpy_unwrap_mesh, open3d_mesh_uv_wrap
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +58,8 @@ class Hunyuan3DTexGenConfig:
 
 class Hunyuan3DPaintPipeline:
     @classmethod
-    def from_pretrained(cls, model_path, mv_model='hunyuan3d-paint-v2-0', use_delight=False, local_files_only=False, device='cuda'):
+    def from_pretrained(cls, model_path, mv_model='hunyuan3d-paint-v2-0', use_delight=False, local_files_only=False,
+                        device='cuda'):
         original_model_path = model_path
         if not os.path.exists(model_path):
             # try local path
@@ -111,12 +105,15 @@ class Hunyuan3DPaintPipeline:
         torch.cuda.empty_cache()
         # Load model
         if self.config.use_delight:
+            from .utils.dehighlight_utils import Light_Shadow_Remover
             self.models['delight_model'] = Light_Shadow_Remover(self.config)
             print('Delight model loaded')
         print(f'Loading multiview model: {self.config.mv_model}')
         if self.config.mv_model == 'hunyuan3d-paint-v2-0' or self.config.mv_model == 'hunyuan3d-paint-v2-0-turbo':
+            from .utils.multiview_utils import Multiview_Diffusion_Net
             self.models['multiview_model'] = Multiview_Diffusion_Net(self.config, local_files_only=local_files_only)
         elif self.config.mv_model == 'mv-adapter':
+            from .mvadapter.pipeline import MVAdapterPipelineWrapper
             self.models['multiview_model'] = MVAdapterPipelineWrapper.from_pretrained(device=self.config.device,
                                                                                       local_files_only=local_files_only)
         print('Multiview model loaded')
@@ -269,10 +266,13 @@ class Hunyuan3DPaintPipeline:
         print('Wrapping UV...')
         t0 = time.time()
         if unwrap_method == 'open3d':
+            from .utils.uv_warp_utils import open3d_mesh_uv_wrap
             mesh = open3d_mesh_uv_wrap(mesh, resolution=texture_size)
         elif unwrap_method == 'bpy':
+            from .utils.uv_warp_utils import bpy_unwrap_mesh
             mesh = bpy_unwrap_mesh(mesh)
         elif unwrap_method == 'xatlas':
+            from .utils.uv_warp_utils import mesh_uv_wrap
             mesh = mesh_uv_wrap(mesh, resolution=texture_size)
         else:
             raise ValueError(f"Invalid unwrap method {unwrap_method}")
@@ -336,14 +336,19 @@ class Hunyuan3DPaintPipeline:
                 image.save(f'debug_multiview_{i}.png')
 
         if upscale_model == 'Aura':
+            from .upscalers.pipelines import AuraSRUpscalerPipeline
             upscaler = AuraSRUpscalerPipeline.from_pretrained()
         elif upscale_model == 'RealESRGAN':
+            from .upscalers.pipelines import RealESRGANUpscalerPipeline
             upscaler = RealESRGANUpscalerPipeline.from_pretrained(self.config.device)
         elif upscale_model == 'InvSR':
+            from .upscalers.pipelines import InvSRUpscalerPipeline
             upscaler = InvSRUpscalerPipeline.from_pretrained(self.config.device)
         elif upscale_model == 'Flux':
+            from .upscalers.pipelines import FluxUpscalerPipeline
             upscaler = FluxUpscalerPipeline.from_pretrained(self.config.device)
         elif upscale_model == 'SD-Upscaler':
+            from .utils.imagesuper_utils import Image_Super_Net
             upscaler = Image_Super_Net(self.config.device)
         else:
             upscaler = None
@@ -392,7 +397,7 @@ class Hunyuan3DPaintPipeline:
 
         normal_texture, metallic_roughness_texture, metallic_factor, roughness_factor = None, None, None, None
         if pbr:
-            from .pbr.pipelines import RGB2XPipeline, StableNormalPipeline
+            from .pbr.pipelines import RGB2XPipeline
 
             pre_pbr_multiviews = [view.resize((1024, 1024)) for view in multiviews[:6]]
             # Let's do normal map first
@@ -444,19 +449,19 @@ class Hunyuan3DPaintPipeline:
 
             print('Baking roughness PBR texture...')
             roughness_texture, roughness_mask = self.bake_from_multiview(roughness_multiviews,
-                                                            self.config.candidate_camera_elevs,
-                                                            self.config.candidate_camera_azims,
-                                                            self.config.candidate_view_weights,
-                                                            method=self.config.merge_method)
+                                                                         self.config.candidate_camera_elevs,
+                                                                         self.config.candidate_camera_azims,
+                                                                         self.config.candidate_view_weights,
+                                                                         method=self.config.merge_method)
             roughness_texture = self.texture_inpaint(roughness_texture, roughness_mask)
             roughness_texture = roughness_texture.cpu().numpy()
             roughness_texture = Image.fromarray((roughness_texture * 255).astype(np.uint8))
             print('Baking metallic PBR texture...')
             metallic_texture, metallic_mask = self.bake_from_multiview(metallic_multiviews,
-                                                           self.config.candidate_camera_elevs,
-                                                           self.config.candidate_camera_azims,
-                                                           self.config.candidate_view_weights,
-                                                           method=self.config.merge_method)
+                                                                       self.config.candidate_camera_elevs,
+                                                                       self.config.candidate_camera_azims,
+                                                                       self.config.candidate_view_weights,
+                                                                       method=self.config.merge_method)
             metallic_texture = self.texture_inpaint(metallic_texture, metallic_mask)
             metallic_texture = metallic_texture.cpu().numpy()
             metallic_texture = Image.fromarray((metallic_texture * 255).astype(np.uint8))
