@@ -73,7 +73,7 @@ def open3d_mesh_uv_wrap(mesh, gutter_size=2.0, max_stretch=0.06, resolution=1024
             parallel_partitions=4,
             gutter=gutter_size,
             max_stretch=max_stretch,
-            n_threads=core_count
+            nthreads=core_count
         )
 
         new_v = mesh.vertices[mesh.faces.reshape(-1)]
