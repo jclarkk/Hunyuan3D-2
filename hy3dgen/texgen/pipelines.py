@@ -195,19 +195,19 @@ class Hunyuan3DPaintPipeline:
         return texture
 
     def recenter_image(self, image, border_ratio=0.2):
-        if image.mode == 'RGB':
-            return image
-        elif image.mode == 'L':
-            image = image.convert('RGB')
+        if 'A' not in image.getbands():
+            return image.convert('RGB') if image.mode != 'RGB' else image
+
+        if image.mode != 'RGBA':
+            image = image.convert('RGBA')
+
+        alpha = np.asarray(image)[..., 3]
+        non_zero = np.argwhere(alpha > 0)
+        if non_zero.size == 0:
             return image
 
-        alpha_channel = np.array(image)[:, :, 3]
-        non_zero_indices = np.argwhere(alpha_channel > 0)
-        if non_zero_indices.size == 0:
-            raise ValueError("Image is fully transparent")
-
-        min_row, min_col = non_zero_indices.min(axis=0)
-        max_row, max_col = non_zero_indices.max(axis=0)
+        min_row, min_col = non_zero.min(axis=0)
+        max_row, max_col = non_zero.max(axis=0)
 
         cropped_image = image.crop((min_col, min_row, max_col + 1, max_row + 1))
 
