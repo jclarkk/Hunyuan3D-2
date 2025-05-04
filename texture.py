@@ -6,6 +6,7 @@ import trimesh
 from PIL import Image
 
 from hy3dgen.rmbg import RMBGRemover
+from hy3dgen.shapegen.utils import normalize_mesh
 from hy3dgen.texgen import Hunyuan3DPaintPipeline
 
 
@@ -126,6 +127,8 @@ def run(args):
 
     # Use mesh file name as output name
     output_name = os.path.splitext(os.path.basename(args.mesh_path))[0] + '_textured'
+
+    mesh = normalize_mesh(mesh)
 
     mesh.export(os.path.join(args.output_dir, '{}.glb'.format(output_name)))
 

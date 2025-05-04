@@ -10,6 +10,7 @@ from mmgp import offload
 from hy3dgen.rmbg import RMBGRemover
 from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline, FaceReducer, FloaterRemover, DegenerateFaceRemover, \
     MeshlibCleaner
+from hy3dgen.shapegen.utils import normalize_mesh
 
 
 def run(args):
@@ -141,6 +142,9 @@ def run(args):
         output_name = os.path.splitext(os.path.basename(args.image_paths[0]))[0]
     else:
         output_name = str(uuid4()).replace('-', '')
+
+    mesh = normalize_mesh(mesh)
+
     mesh.export(os.path.join(args.output_dir, '{}.glb'.format(output_name)))
 
     print(f"Output saved to {args.output_dir}/{output_name}.glb")
