@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import time
 from uuid import uuid4
@@ -23,18 +24,38 @@ def run(args):
     if args.remesh_method not in [None, 'im', 'bpt', 'deepmesh', 'None']:
         raise ValueError("Re-mesh type must be either 'im', 'bpt' or 'deepmesh'")
 
-    # Only one image supported right now
-    image_path = args.image_paths[0]
-
     t0 = time.time()
 
     # Preprocess the image
-    image = Image.open(image_path)
     rmbg_remover = RMBGRemover(local_files_only=args.local_files_only)
-    image = rmbg_remover(image, height=args.resolution, width=args.resolution)
+    if args.image_json is not None:
+        # Read the JSON as dict
+        with open(args.image_json) as f:
+            image_dict = json.load(f)
 
-    processed_image_name = os.path.basename(image_path).split('.')[0] + '_input.png'
-    image.save(os.path.join(args.output_dir, processed_image_name))
+        processed_dict = {}
+        # Process all images
+        for key, val in image_dict.items():
+            current_image = Image.open(val)
+            current_image = rmbg_remover(current_image, height=args.resolution, width=args.resolution)
+            processed_dict[key] = current_image
+        image = processed_dict
+
+        # Since texture still relies on first image, we need to ensure it's in context.
+        if 'front' in image_dict:
+            image_path = image_dict['front']
+        else:
+            image_path = list(image_dict.values())[0]
+    elif args.image_paths is not None:
+        # Only one image supported in this argument
+        image_path = args.image_paths[0]
+        image = Image.open(image_path)
+        image = rmbg_remover(image, height=args.resolution, width=args.resolution)
+
+        processed_image_name = os.path.basename(image_path).split('.')[0] + '_input.png'
+        image.save(os.path.join(args.output_dir, processed_image_name))
+    else:
+        raise ValueError("No image paths provided")
 
     t1 = time.time()
     print(f"Image processing took {t1 - t0:.2f} seconds")
@@ -67,6 +88,16 @@ def run(args):
         )
         # In this pipeline we might get holes sometimes
         fix_holes = True
+    elif args.geo_model == 'hunyuan3d-dit-v2-mv-turbo':
+        mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
+            'tencent/Hunyuan3D-2mv',
+            config_path='./configs/hunyuan3d-dit-v2-mv-turbo.yaml',
+            use_safetensors=True,
+            subfolder='hunyuan3d-dit-v2-mv-turbo',
+            variant='fp16',
+            device=args.device,
+            local_files_only=args.local_files_only
+        )
     else:
         mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
             'tencent/Hunyuan3D-2',
@@ -138,8 +169,8 @@ def run(args):
     os.makedirs(args.output_dir, exist_ok=True)
 
     # Use image file name as output name
-    if len(args.image_paths) == 1:
-        output_name = os.path.splitext(os.path.basename(args.image_paths[0]))[0]
+    if image_path is not None:
+        output_name = os.path.splitext(os.path.basename(image_path))[0]
     else:
         output_name = str(uuid4()).replace('-', '')
 
@@ -154,8 +185,9 @@ if __name__ == "__main__":
     # Parse arguments and then call run
     parser = argparse.ArgumentParser()
     parser.add_argument('--local_files_only', action='store_true', help='Use local models only')
-    parser.add_argument('--image_paths', type=str, nargs='+', required=True,
+    parser.add_argument('--image_paths', type=str, nargs='+', required=False,
                         help='Path to input images. Can specify multiple paths separated by spaces')
+    parser.add_argument('--image_json', type=str, default=None, help='Path to input image json')
     parser.add_argument('--output_dir', type=str, default='./output', help='Path to output directory')
     parser.add_argument('--seed', type=int, default=0, help='Seed for the random number generator')
     parser.add_argument('--steps', type=int, default=None, help='Number of inference steps')
