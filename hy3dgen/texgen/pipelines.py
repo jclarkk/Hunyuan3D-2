@@ -47,7 +47,7 @@ class Hunyuan3DTexGenConfig:
 
         self.render_size = 2048
         self.texture_size = 1024
-        self.bake_exp = 4
+        self.bake_exp = 8
         self.merge_method = 'fast'
 
         self.pipe_dict = {'hunyuan3d-paint-v2-0': 'hunyuanpaint',

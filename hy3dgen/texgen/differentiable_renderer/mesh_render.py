@@ -136,7 +136,7 @@ class MeshRender():
         self.max_mip_level = max_mip_level
         self.filter_mode = filter_mode
 
-        self.bake_angle_thres = 75
+        self.bake_angle_thres = 60
         self.bake_unreliable_kernel_size = int(
             (2 / 512) * max(self.default_resolution[0], self.default_resolution[1]))
         self.bake_mode = bake_mode
@@ -793,9 +793,24 @@ class MeshRender():
             textures.append(texture)
             cos_maps.append(cos_map)
 
-        texture_merge, trust_map_merge = self.fast_bake_texture(
+        texture_merge, trust_map_merge = self.fast_bake_texture_argmax(
             textures, cos_maps)
         return texture_merge, trust_map_merge
+
+    @staticmethod
+    def fast_bake_texture_argmax(textures, cos_maps):
+        # stack:  N × H × W × C
+        tex_stack = torch.stack(textures, 0)
+        cos_stack = torch.stack(cos_maps, 0).squeeze(-1)  # N × H × W
+        idx = torch.argmax(cos_stack, 0)  # H × W
+
+        out = torch.zeros_like(tex_stack[0])
+        for i in range(tex_stack.shape[0]):
+            mask = (idx == i)
+            out[mask] = tex_stack[i][mask]
+
+        trust = (cos_stack.max(0).values > 1e-8).unsqueeze(-1)
+        return out, trust
 
     @torch.no_grad()
     def fast_bake_texture(self, textures, cos_maps):
