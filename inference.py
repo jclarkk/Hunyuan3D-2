@@ -62,9 +62,8 @@ def run(args):
 
     mc_algo = 'mc' if args.device in ['cpu', 'mps'] else args.mc_algo
 
+    steps = None
     if args.steps is None:
-        steps = 5 if 'turbo' in args.geo_model else 30
-    else:
         steps = args.steps
     fix_holes = False
     if args.geo_model == 'hunyuan3d-dit-v2-0-turbo':
@@ -76,6 +75,8 @@ def run(args):
             device=args.device,
             local_files_only=args.local_files_only
         )
+        if steps is None:
+            steps = 5
     elif args.geo_model == 'hunyuan3d-dit-v2-mini-turbo':
         mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
             'tencent/Hunyuan3D-2mini',
@@ -86,6 +87,8 @@ def run(args):
             device=args.device,
             local_files_only=args.local_files_only
         )
+        if steps is None:
+            steps = 5
         # In this pipeline we might get holes sometimes
         fix_holes = True
     elif args.geo_model == 'hunyuan3d-dit-v2-mv-turbo':
@@ -98,6 +101,8 @@ def run(args):
             device=args.device,
             local_files_only=args.local_files_only
         )
+        if steps is None:
+            steps = 15
     else:
         mesh_pipeline = Hunyuan3DDiTFlowMatchingPipeline.from_pretrained(
             'tencent/Hunyuan3D-2',
@@ -105,6 +110,8 @@ def run(args):
             device=args.device,
             local_files_only=args.local_files_only
         )
+        if steps is None:
+            steps = 30
     mesh_pipeline.enable_flashvdm(mc_algo=mc_algo)
 
     t2 = time.time()
