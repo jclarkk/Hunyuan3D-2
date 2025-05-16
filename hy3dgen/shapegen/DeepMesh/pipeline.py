@@ -3,7 +3,6 @@ import os
 import numpy as np
 import torch
 import trimesh
-from torch.nn.parallel import DistributedDataParallel as DDP
 
 from .lit_gpt.config import Config
 from .lit_gpt.model_cache import GPTCache

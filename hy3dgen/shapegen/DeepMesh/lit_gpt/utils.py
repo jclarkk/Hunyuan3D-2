@@ -503,3 +503,17 @@ def get_default_supported_precision(training: bool, tpu: bool = False) -> str:
     if not torch.cuda.is_available() or torch.cuda.is_bf16_supported():
         return "bf16-mixed" if training else "bf16-true"
     return "16-mixed" if training else "16-true"
+
+
+def quantize_8bit_linear(model):
+    from bitsandbytes.nn import Linear8bitLt
+    for name, module in model.named_modules():
+        if isinstance(module, nn.Linear) and module.weight.dtype == torch.float16:
+            quant_ln = Linear8bitLt(module.in_features,
+                                    module.out_features,
+                                    bias=module.bias is not None)
+            quant_ln.weight = module.weight
+            if module.bias is not None:
+                quant_ln.bias = module.bias
+            parent, attr = name.rsplit('.', 1) if '.' in name else ('', name)
+            setattr(eval(f'model.{parent}') if parent else model, attr, quant_ln)

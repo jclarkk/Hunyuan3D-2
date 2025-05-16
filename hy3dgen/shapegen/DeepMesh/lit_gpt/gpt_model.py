@@ -208,38 +208,23 @@ class GPT(nn.Module):
             self.mask_cache = None
 
     def create_sliding_window_attention_mask(self, sequence_length=5000, window_size=1000) -> torch.Tensor:
-        """
-        创建滑动窗口的注意力掩码。
-        每个位置i只能关注[max(i - window_size + 1, 0), i]范围内的token。
-
-        参数:
-            sequence_length (int): 序列的总长度（例如5000）。
-            window_size (int): 注意力窗口的大小（例如1000）。
-
-        返回:
-            torch.Tensor: 注意力掩码，形状为 (1, 1, sequence_length, sequence_length)。
-                        值为True的位置表示可以关注，False表示不能关注。
-        """
-        # 创建一个空的掩码矩阵，初始化为False
         mask = torch.zeros((sequence_length, sequence_length), dtype=torch.bool)
 
         for i in range(sequence_length):
-            # 每个位置只能关注它之前最多1000个token
             start_index = max(i - window_size + 1, 0)
-            mask[i, start_index:i + 1] = 1  # 将从 start_index 到 i 的位置设为1，表示可以关注
+            mask[i, start_index:i+1] = 1
 
-        # 调整形状以适应批次和头数
-        mask = mask.unsqueeze(0).unsqueeze(0)  # 形状: (1, 1, sequence_length, sequence_length)
+        mask = mask.unsqueeze(0).unsqueeze(0)
 
         return mask
 
     def forward(
             self, idx: torch.Tensor, pc=None, max_seq_length: Optional[int] = None, \
-            input_pos: Optional[torch.Tensor] = None, start: Optional[int] = 0, window_size: Optional[int] = 4000
+            input_pos: Optional[torch.Tensor] = None, start: Optional[int] = 0, window_size: Optional[int] = 2048
     ) -> torch.Tensor:
         B, T = idx.size()
-        # use_kv_cache = input_pos is not None
-        use_kv_cache = None
+
+        use_kv_cache = input_pos is not None
 
         block_size = self.config.block_size
         if max_seq_length is None:
@@ -259,26 +244,10 @@ class GPT(nn.Module):
         if use_kv_cache and self.mask_cache is None:
             self.mask_cache = self.build_mask_cache(idx)
 
-        # cos, sin = self.rope_cache
-        # cos      = cos.to(idx.device)
-        # sin      = sin.to(idx.device)
-
-        if use_kv_cache:
-            # cos = cos.index_select(0, input_pos)
-            # sin = sin.index_select(0, input_pos)
-            mask = self.mask_cache.index_select(2, input_pos)
-            mask = mask[:, :, :, :max_seq_length]
-        else:
-
-            if window_size > 0:
-                mask = self.create_sliding_window_attention_mask(sequence_length=T, window_size=window_size).to(
-                    idx.device)
-            else:
-                # build casual mask
-                ones = torch.ones((T, T), device=idx.device, dtype=torch.bool)
-                mask = torch.tril(ones).unsqueeze(0).unsqueeze(0)
-                # mask = torch.tril(ones).unsqueeze(0).repeat(B, 1, 1)
-                # mask = None
+        if use_kv_cache and not self.kv_caches:
+            rope_cache_len = int(self.config.head_size *
+                                 self.config.rotary_percentage) * 2
+            self.kv_caches = self.build_kv_caches(idx, max_seq_length=window_size, rope_cache_length=rope_cache_len)
 
         # forward the model itself
         x = self.transformer.wte(idx)  # token embeddings of shape (b, t, n_embd)
@@ -290,18 +259,18 @@ class GPT(nn.Module):
         else:
             cond_embeds = None
 
-        # if not use_kv_cache:
-        #     for block in self.transformer.h:
-        #         x, *_ = block(x, (cos, sin),  max_seq_length, cond_embeds,mask)
-        # else:
-        #     self.kv_caches = self.kv_caches or self.build_kv_caches(x, max_seq_length, cos.size(-1) * 2)
-        #     for i, block in enumerate(self.transformer.h):
-        #         x, self.kv_caches[i] = block(x, (cos, sin),  max_seq_length, cond_embeds, mask, input_pos, self.kv_caches[i])
-        x = self.transformer.h(x, max_seq_length, start=start, pc=cond_embeds, mask=mask)
+        x = self.transformer.h(
+            x,
+            max_seq_length=window_size,
+            start=start,
+            pc=cond_embeds,
+            mask=None,
+            input_pos=input_pos,
+            kv_cache=self.kv_caches,
+        )
 
         x = self.transformer.ln_f(x)
-
-        return self.lm_head(x)  # (b, t, vocab_size)
+        return self.lm_head(x)
 
     @classmethod
     def from_name(cls, name: str, **kwargs: Any) -> Self:
@@ -457,17 +426,17 @@ class CausalSelfAttention(nn.Module):
 
         if kv_cache is not None:
             cache_k, cache_v = kv_cache
-            cache_k, cache_v = cache_k.to(dtype=k.dtype), cache_v.to(dtype=v.dtype)
-            # check if reached token limit
-            if input_pos[-1] >= max_seq_length:
-                input_pos = torch.tensor(max_seq_length - 1, device=input_pos.device)
-                # shift 1 position to the left
-                cache_k = torch.roll(cache_k, -1, dims=1)
-                cache_v = torch.roll(cache_v, -1, dims=1)
+            cache_k, cache_v = cache_k.to(k.dtype), cache_v.to(v.dtype)
 
-            k = cache_k.index_copy_(1, input_pos, k)
-            v = cache_v.index_copy_(1, input_pos, v)
-            kv_cache = k, v
+            cache_k.index_copy_(1, input_pos, k)
+            cache_v.index_copy_(1, input_pos, v)
+
+            # if we just filled the last slot, advance the window one step
+            if input_pos[-1] + 1 == cache_k.size(1):
+                cache_k, cache_v = self.roll_kv_left(cache_k, cache_v, shift=1)
+
+            k, v = cache_k, cache_v
+            kv_cache = (k, v)
 
         y = self.scaled_dot_product_attention(q, k, v, mask=mask)
 
@@ -477,6 +446,13 @@ class CausalSelfAttention(nn.Module):
         y = self.proj(y)
 
         return y, kv_cache
+
+    @staticmethod
+    def roll_kv_left(k, v, shift=1):
+        # k, v: [B, L, H, D]
+        k = torch.roll(k, shifts=-shift, dims=1)
+        v = torch.roll(v, shifts=-shift, dims=1)
+        return k, v
 
     def scaled_dot_product_attention(
             self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, mask: Optional[torch.Tensor] = None
