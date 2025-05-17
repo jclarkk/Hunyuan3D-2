@@ -46,8 +46,8 @@ class MVAdapterPipelineWrapper:
         )
         pipe.init_custom_adapter(num_views=6, self_attn_processor=DecoupledMVRowColSelfAttnProcessor2_0)
         pipe.load_custom_adapter(
-            "stepfun-ai/Step1X-3D",
-            weight_name="step1x-3d-ig2v.safetensors",
+            "huanngzh/mv-adapter",
+            weight_name="mvadapter_ig2mv_sdxl.safetensors",
             torch_dtype=torch.float16,
             local_files_only=local_files_only,
         )
