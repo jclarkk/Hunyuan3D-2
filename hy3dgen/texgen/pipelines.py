@@ -362,6 +362,9 @@ class Hunyuan3DPaintPipeline:
         elif upscale_model == 'SD-Upscaler':
             from .utils.imagesuper_utils import Image_Super_Net
             upscaler = Image_Super_Net(self.config.device)
+        elif upscale_model == 'Topaz':
+            from .upscalers.pipelines import TopazAPIUpscalerPipeline
+            upscaler = TopazAPIUpscalerPipeline()
         else:
             upscaler = None
 
