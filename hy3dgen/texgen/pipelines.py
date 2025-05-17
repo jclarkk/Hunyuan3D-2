@@ -176,28 +176,27 @@ class Hunyuan3DPaintPipeline:
         return position_maps
 
     def bake_from_multiview(self, views, camera_elevs,
-                            camera_azims, view_weights, method='graphcut'):
-        project_textures, project_weighted_cos_maps = [], []
-        project_boundary_maps = []
-        for view, camera_elev, camera_azim, weight in zip(
-                views, camera_elevs, camera_azims, view_weights):
-            project_texture, project_cos_map, project_boundary_map = self.render.back_project(
-                view, camera_elev, camera_azim)
-            project_cos_map = weight * (project_cos_map ** self.config.bake_exp)
-            project_textures.append(project_texture)
-            project_weighted_cos_maps.append(project_cos_map)
-            project_boundary_maps.append(project_boundary_map)
+                            camera_azims, view_weights):
+        """
+        • if <=6 views → original single-pass bake
+        • if  >6 views → two-pass: first 6 as primary, rest fill gaps only
+        """
+        proj_tex, proj_cos = [], []
+        for view, elev, azim, w in zip(views, camera_elevs, camera_azims, view_weights):
+            tex, cos, _ = self.render.back_project(view, elev, azim)
+            proj_tex.append(tex)
+            proj_cos.append(w * (cos ** self.config.bake_exp))
 
-        if method == 'fast':
-            texture, ori_trust_map = self.render.fast_bake_texture(
-                project_textures, project_weighted_cos_maps)
-
-            texture = texture.clone().detach().float()
-            if self.config.use_delight:
-                texture = self.render.color_rgb_to_srgb(texture)
+        if len(views) <= 6:
+            texture, trust = self.render.fast_bake_texture(proj_tex,
+                                                           proj_cos)
         else:
-            raise f'no method {method}'
-        return texture, ori_trust_map > 1E-8
+            texture, trust = self.render.fast_bake_texture_gap(
+                proj_tex[:6], proj_cos[:6],  # primary
+                proj_tex[6:], proj_cos[6:]  # secondary
+            )
+
+        return texture, trust
 
     def texture_inpaint(self, texture, mask):
 
@@ -405,8 +404,7 @@ class Hunyuan3DPaintPipeline:
         print('Baking texture...')
         t0 = time.time()
         texture, mask = self.bake_from_multiview(multiviews,
-                                                 selected_camera_elevs, selected_camera_azims, selected_view_weights,
-                                                 method=self.config.merge_method)
+                                                 selected_camera_elevs, selected_camera_azims, selected_view_weights)
         t1 = time.time()
         print(f"Texture baking took {t1 - t0:.2f} seconds")
 
@@ -466,8 +464,7 @@ class Hunyuan3DPaintPipeline:
             roughness_texture, roughness_mask = self.bake_from_multiview(roughness_multiviews,
                                                                          self.config.candidate_camera_elevs,
                                                                          self.config.candidate_camera_azims,
-                                                                         self.config.candidate_view_weights,
-                                                                         method=self.config.merge_method)
+                                                                         self.config.candidate_view_weights)
             roughness_texture = self.texture_inpaint(roughness_texture, roughness_mask)
             roughness_texture = roughness_texture.cpu().numpy()
             roughness_texture = Image.fromarray((roughness_texture * 255).astype(np.uint8))
@@ -475,8 +472,7 @@ class Hunyuan3DPaintPipeline:
             metallic_texture, metallic_mask = self.bake_from_multiview(metallic_multiviews,
                                                                        self.config.candidate_camera_elevs,
                                                                        self.config.candidate_camera_azims,
-                                                                       self.config.candidate_view_weights,
-                                                                       method=self.config.merge_method)
+                                                                       self.config.candidate_view_weights)
             metallic_texture = self.texture_inpaint(metallic_texture, metallic_mask)
             metallic_texture = metallic_texture.cpu().numpy()
             metallic_texture = Image.fromarray((metallic_texture * 255).astype(np.uint8))

@@ -830,6 +830,33 @@ class MeshRender():
 
         return texture_merge, trust_map_merge > 1E-8
 
+    @torch.no_grad()
+    def fast_bake_texture_gap(self,
+                              textures_primary, cos_maps_primary,
+                              textures_secondary, cos_maps_secondary):
+        """
+        Two-pass merge:
+          • first pass = normal fast_bake_texture on the primary set
+          • second pass = add secondary views **only where trust==0**
+        Returns (texture_merge, final_trust_mask)
+        """
+        tex_merge, trust = self.fast_bake_texture(
+            textures_primary, cos_maps_primary)
+
+        tex_merge = tex_merge.clone()
+        trust_f = trust.float()
+
+        for tex, cos in zip(textures_secondary, cos_maps_secondary):
+            gap_mask = (trust_f == 0)
+            cos = cos * gap_mask
+            if cos.sum() < 1e-4:
+                continue
+            tex_merge += tex * cos
+            trust_f += cos
+
+        tex_merge = tex_merge / torch.clamp(trust_f, min=1E-8)
+        return tex_merge, (trust_f > 1E-8)
+
     def uv_inpaint(self, texture, mask):
         EXPECTED_VERSION = "1.2"
 
