@@ -35,8 +35,6 @@ class MVAdapterPipelineWrapper:
             "vae": AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", **common_kwargs)
         }
 
-        common_kwargs['device_map'] = 'balanced'
-
         pipe = MVAdapterI2MVSDXLPipeline.from_pretrained(base_model, **common_kwargs, **pipe_kwargs)
 
         pipe.safety_checker = None
@@ -51,6 +49,9 @@ class MVAdapterPipelineWrapper:
             torch_dtype=torch.float16,
             local_files_only=local_files_only,
         )
+
+        if device == "cuda":
+            pipe.to(device, dtype=torch.float16)
 
         return cls(pipe, device=device)
 
@@ -239,6 +240,8 @@ class MVAdapterPipelineWrapper:
             lora_scale: Scale for LoRA if used
             save_debug_images: Whether to save intermediate images for debugging
         """
+        self.pipeline.cond_encoder.to(device='cuda', dtype=torch.float16)
+        self.pipeline.to(device='cuda', dtype=torch.float16)
 
         # Prepare reference image
         if isinstance(image_prompt, str):
