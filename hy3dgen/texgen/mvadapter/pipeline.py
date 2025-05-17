@@ -52,9 +52,6 @@ class MVAdapterPipelineWrapper:
             local_files_only=local_files_only,
         )
 
-        if device == "cuda":
-            pipe.to(device, dtype=torch.float16)
-
         return cls(pipe, device=device)
 
     def __init__(self, pipeline: MVAdapterI2MVSDXLPipeline, device: str):
