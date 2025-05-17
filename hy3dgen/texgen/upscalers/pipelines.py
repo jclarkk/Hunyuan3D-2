@@ -143,6 +143,7 @@ class TopazAPIUpscalerPipeline:
         image_bytes.seek(0)
 
         headers = {
+            'X-API-Key': self.topaz_api_key,
             'accept': f'image/{self.output_format}',
         }
 
