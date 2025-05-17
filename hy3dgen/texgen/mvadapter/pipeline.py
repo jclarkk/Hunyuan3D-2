@@ -239,8 +239,6 @@ class MVAdapterPipelineWrapper:
             lora_scale: Scale for LoRA if used
             save_debug_images: Whether to save intermediate images for debugging
         """
-        self.pipeline.cond_encoder.to(device='cuda', dtype=torch.float16)
-        self.pipeline.to(device='cuda', dtype=torch.float16)
 
         # Prepare reference image
         if isinstance(image_prompt, str):
