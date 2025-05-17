@@ -35,7 +35,7 @@ class MVAdapterPipelineWrapper:
             "vae": AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", **common_kwargs)
         }
 
-        common_kwargs['device_map='] = 'auto'
+        common_kwargs['device_map'] = 'auto'
 
         pipe = MVAdapterI2MVSDXLPipeline.from_pretrained(base_model, **common_kwargs, **pipe_kwargs)
 
