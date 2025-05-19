@@ -23,6 +23,10 @@ def mesh_uv_wrap(mesh, padding=2, resolution=1024, max_iterations=4):
     if isinstance(mesh, trimesh.Scene):
         mesh = mesh.dump(concatenate=True)
 
+    large_mesh_mode = True
+    if len(mesh.faces) > 100000 and len(mesh.faces) < 500000:
+        large_mesh_mode = True
+        print("Warning: The mesh has more than 100,000 faces, which may cause slowdowns.")
     if len(mesh.faces) > 500000:
         raise ValueError("The mesh has more than 500,000 faces, which is not supported.")
 
@@ -35,7 +39,11 @@ def mesh_uv_wrap(mesh, padding=2, resolution=1024, max_iterations=4):
     atlas.add_mesh(vertices, faces)
 
     chart_options = xatlas.ChartOptions()
-    chart_options.max_iterations = max_iterations
+    if large_mesh_mode:
+        chart_options.max_iterations = 1
+        chart_options.max_cost = 3.0
+    else:
+        chart_options.max_iterations = max_iterations
     chart_options.normal_seam_weight = 0.5
     chart_options.texture_seam_weight = 1.0
 
@@ -43,6 +51,8 @@ def mesh_uv_wrap(mesh, padding=2, resolution=1024, max_iterations=4):
     pack_options.padding = padding
     pack_options.resolution = resolution
     pack_options.bilinear = True
+    if large_mesh_mode:
+        pack_options.rotate_charts = False
 
     atlas.generate(chart_options=chart_options, pack_options=pack_options)
 
@@ -54,6 +64,7 @@ def mesh_uv_wrap(mesh, padding=2, resolution=1024, max_iterations=4):
     mesh.visual.uv = uvs
 
     return mesh
+
 
 def open3d_mesh_uv_wrap(mesh, gutter_size=2.0, max_stretch=0.06, resolution=1024):
     try:
