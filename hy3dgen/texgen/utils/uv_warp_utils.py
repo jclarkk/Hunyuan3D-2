@@ -23,8 +23,8 @@ def mesh_uv_wrap(mesh, padding=2, resolution=1024, max_iterations=4):
     if isinstance(mesh, trimesh.Scene):
         mesh = mesh.dump(concatenate=True)
 
-    if len(mesh.faces) > 100000:
-        raise ValueError("The mesh has more than 100,000 faces, which is not supported.")
+    if len(mesh.faces) > 500000:
+        raise ValueError("The mesh has more than 500,000 faces, which is not supported.")
 
     vertices = np.asarray(mesh.vertices, dtype=np.float32)
     faces = np.asarray(mesh.faces, dtype=np.uint32)
