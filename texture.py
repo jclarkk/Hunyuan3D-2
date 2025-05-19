@@ -33,13 +33,13 @@ def run(args):
         mesh = mesh.to_geometry()
 
     # Reduce face count
-    if (args.remesh_method is not None and args.remesh_method != 'None') or len(mesh.faces) > 100000:
+    if (args.remesh_method is not None and args.remesh_method != 'None') or len(mesh.faces) > 500000:
         from hy3dgen.shapegen.postprocessors import FaceReducer
-        mesh = FaceReducer()(mesh, remesh_method=args.remesh_method)
+        mesh = FaceReducer()(mesh, remesh_method=args.remesh_method, max_facenum=500000)
 
         # Check if face count is still too high
-        if len(mesh.faces) > 100000:
-            raise ValueError("Face count must be less than or equal to 100000")
+        if len(mesh.faces) > 500000:
+            raise ValueError("Face count must be less than or equal to 500000")
 
     t1 = time.time()
     print(f"Mesh pre-processing took {t1 - t0:.2f} seconds")
