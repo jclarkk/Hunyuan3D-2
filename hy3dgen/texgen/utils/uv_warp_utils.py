@@ -24,11 +24,11 @@ def mesh_uv_wrap(mesh, padding=2, resolution=1024, max_iterations=4):
         mesh = mesh.dump(concatenate=True)
 
     large_mesh_mode = False
-    if len(mesh.faces) > 100000 and len(mesh.faces) < 500000:
+    if len(mesh.faces) > 100000 and len(mesh.faces) < 200000:
         large_mesh_mode = True
         print("Warning: The mesh has more than 100,000 faces, which may cause slowdowns.")
-    if len(mesh.faces) > 500000:
-        raise ValueError("The mesh has more than 500,000 faces, which is not supported.")
+    if len(mesh.faces) > 200000:
+        raise ValueError("The mesh has more than 200,000 faces, which is not supported.")
 
     vertices = np.asarray(mesh.vertices, dtype=np.float32)
     faces = np.asarray(mesh.faces, dtype=np.uint32)
