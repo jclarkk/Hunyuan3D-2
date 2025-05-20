@@ -23,7 +23,7 @@ def mesh_uv_wrap(mesh, padding=2, resolution=1024, max_iterations=4):
     if isinstance(mesh, trimesh.Scene):
         mesh = mesh.dump(concatenate=True)
 
-    large_mesh_mode = True
+    large_mesh_mode = False
     if len(mesh.faces) > 100000 and len(mesh.faces) < 500000:
         large_mesh_mode = True
         print("Warning: The mesh has more than 100,000 faces, which may cause slowdowns.")
