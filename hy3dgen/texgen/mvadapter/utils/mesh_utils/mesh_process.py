@@ -252,7 +252,17 @@ def uv_parameterize_uvatlas(
 
 
 ### Pack All ###
-def process_raw(mesh, preprocess=True, device="cpu"):
+def process_raw(mesh_path, save_path, preprocess=True, device="cpu"):
+    scene = trimesh.load(mesh_path, force="mesh", process=False)
+    if isinstance(scene, trimesh.Trimesh):
+        mesh = scene
+    elif isinstance(scene, trimesh.scene.Scene):
+        mesh = trimesh.Trimesh()
+        for obj in scene.geometry.values():
+            mesh = trimesh.util.concatenate([mesh, obj])
+    else:
+        raise ValueError(f"Unknown mesh type at {mesh_path}.")
+
     vertices = mesh.vertices
     faces = mesh.faces
 
@@ -335,4 +345,4 @@ def process_raw(mesh, preprocess=True, device="cpu"):
         visual=visual,
         process=False,
     )
-    return tmesh
+    tmesh.export(save_path)

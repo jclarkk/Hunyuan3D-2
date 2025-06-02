@@ -1,12 +1,18 @@
 import io
+import math
+from abc import ABC, abstractmethod
+from contextlib import contextmanager
+from dataclasses import dataclass
+from datetime import datetime
+from typing import List, Optional, Union
+
 import numpy as np
+import nvdiffrast.torch as dr
 import torch
 import torch.nn.functional as F
 import trimesh
 from PIL import Image
-from contextlib import contextmanager
-from dataclasses import dataclass
-from typing import Optional, Union
+from torch import BoolTensor, FloatTensor
 
 from .utils import tensor_to_image
 
@@ -190,7 +196,7 @@ def mesh_use_texture(mesh: TexturedMesh, texture: torch.FloatTensor):
 
 
 def load_mesh(
-    mesh: trimesh.Trimesh,
+    mesh_path: str,
     rescale: bool = False,
     move_to_center: bool = False,
     scale: float = 0.5,
@@ -203,6 +209,28 @@ def load_mesh(
     device: Optional[str] = None,
     return_transform: bool = False,
 ) -> TexturedMesh:
+    if mesh_path.endswith(".npz"):
+
+        class Mesh:
+            vertices = None
+            faces = None
+
+        data = np.load(mesh_path)
+        mesh = Mesh()
+        mesh.vertices = data["vertices"]
+        mesh.faces = data["faces"]
+        merge_vertices = False
+    else:
+        scene = trimesh.load(mesh_path, force="mesh", process=False)
+        if isinstance(scene, trimesh.Trimesh):
+            mesh = scene
+        elif isinstance(scene, trimesh.scene.Scene):
+            mesh = trimesh.Trimesh()
+            for obj in scene.geometry.values():
+                mesh = trimesh.util.concatenate([mesh, obj])
+        else:
+            raise ValueError(f"Unknown mesh type at {mesh_path}.")
+
     vertex_normals = getattr(mesh, "vertex_normals", None)
 
     # move to center
@@ -311,69 +339,6 @@ def load_mesh(
         return textured_mesh, transform_offset, transform_scale
     else:
         return textured_mesh
-
-def replace_mesh_texture_trimesh(
-    mesh: trimesh.Trimesh,
-    texture: Union[Image.Image, np.ndarray, torch.Tensor],
-    metallic_roughness_texture: Optional[
-        Union[Image.Image, np.ndarray, torch.Tensor]
-    ] = None,
-    normal_texture: Optional[Union[Image.Image, np.ndarray, torch.Tensor]] = None,
-    texture_format: str = "PNG",
-    task_id: str = "",
-    **kwargs,
-) -> trimesh.Trimesh:
-    def convert_image(tensor):
-        texture = tensor_to_image(tensor)
-        texture.format = texture_format
-        return texture
-
-    texture = convert_image(texture)
-    if metallic_roughness_texture is not None:
-        metallic_roughness_texture = convert_image(metallic_roughness_texture)
-
-    if normal_texture is not None:
-        normal_texture = convert_image(normal_texture)
-
-    if not isinstance(mesh.visual.material, trimesh.visual.material.PBRMaterial):
-        material = trimesh.visual.texture.PBRMaterial(
-            baseColorFactor=[1.0, 1.0, 1.0, 1.0],
-            roughnessFactor=0.9 if metallic_roughness_texture is None else 1.0,
-            metallicFactor=0.0 if metallic_roughness_texture is None else 1.0,
-            baseColorTexture=texture,
-            metallicRoughnessTexture=metallic_roughness_texture,
-            normalTexture=normal_texture,
-        )
-        mesh.visual = trimesh.visual.TextureVisuals(
-            uv=mesh.visual.uv, image=texture, material=material
-        )
-    else:
-        mesh.visual.material.baseColorTexture = texture
-        mesh.visual.material.baseColorFactor = [1.0, 1.0, 1.0, 1.0]
-        if metallic_roughness_texture is None:
-            mesh.visual.material.roughnessFactor = 0.9
-            mesh.visual.material.metallicFactor = 0.0
-        else:
-            mesh.visual.material.roughnessFactor = 1.0
-            mesh.visual.material.metallicFactor = 1.0
-            mesh.visual.material.metallicRoughnessTexture = metallic_roughness_texture
-            mesh.visual.material.normalTexture = normal_texture
-
-    def p_func(tree, task_id_in=task_id):
-        if "nodes" in tree and tree["nodes"][0]["name"].find("world") >= 0:
-            tree["nodes"].pop(0)
-        change_dict = {
-            "nodes": "node",
-            "meshes": "mesh",
-            "materials": "mat",
-            "images": "image",
-        }
-        for k, v in change_dict.items():
-            if k in tree:
-                for index in range(len(tree[k])):
-                    tree[k][index]["name"] = f"{v}_{task_id_in}"
-
-    return mesh
 
 
 def replace_mesh_texture_and_save_trimesh(
