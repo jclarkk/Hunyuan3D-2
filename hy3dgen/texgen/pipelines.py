@@ -450,6 +450,7 @@ class Hunyuan3DPaintPipeline:
                 preprocess_mesh=False,
                 uv_size=self.config.texture_size,
                 rgb_path=mv_path,
+                rgb_process_config=ModProcessConfig(inpaint_mode='view'),
                 debug_mode=debug
             )
             t1 = time.time()
