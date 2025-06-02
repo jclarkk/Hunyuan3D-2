@@ -30,6 +30,7 @@ from mmgp import offload
 
 from hy3dgen.mmgp_utils import replace_property_getter
 from hy3dgen.shapegen.utils import logger
+from hy3dgen.texgen.mvadapter.pipelines.pipeline_texture import TexturePipelineOutput
 
 MAX_SEED = int(1e7)
 
@@ -102,14 +103,14 @@ def randomize_seed_fn(seed: int, randomize_seed: bool) -> int:
     return seed
 
 
-def build_model_viewer_html(save_folder, height=660, width=790, textured=False):
+def build_model_viewer_html(glb_name, save_folder, height=660, width=790, textured=False):
     # Remove first folder from path to make relative path
     if textured:
-        related_path = f"./textured_mesh.glb"
+        related_path = f"./{glb_name}"
         template_name = './assets/modelviewer-textured-template.html'
         output_html_path = os.path.join(save_folder, f'textured_mesh.html')
     else:
-        related_path = f"./white_mesh.glb"
+        related_path = f"./{glb_name}"
         template_name = './assets/modelviewer-template.html'
         output_html_path = os.path.join(save_folder, f'white_mesh.html')
     offset = 50 if textured else 10
@@ -318,21 +319,32 @@ def generation_all(
         enhance_texture_angles=enhance_texture_angles,
         pbr=pbr,
         texture_size=texture_size,
-        unwrap_method=uv_unwrap_method
+        unwrap_method=uv_unwrap_method,
+        output_dir=save_folder,
+        output_name='textured_mesh',
     )
     logger.info("---Texture Generation takes %s seconds ---" % (time.time() - tmp_time))
     stats['time']['texture generation'] = time.time() - tmp_time
     stats['time']['total'] = time.time() - start_time_0
 
-    textured_mesh.metadata['extras'] = stats
-    path_textured = export_mesh(textured_mesh, save_folder, textured=True)
-    model_viewer_html_textured = build_model_viewer_html(save_folder, height=HTML_HEIGHT, width=HTML_WIDTH,
+    if isinstance(mesh, trimesh.Trimesh):
+        textured_mesh.metadata['extras'] = stats
+        glb_path = export_mesh(textured_mesh, save_folder, textured=True)
+    elif isinstance(mesh, TexturePipelineOutput):
+        if textured_mesh.pbr_model_save_path is not None:
+            glb_path = textured_mesh.pbr_model_save_path
+        else:
+            glb_path = textured_mesh.shaded_model_save_path
+
+    glb_name = os.path.basename(glb_path)
+
+    model_viewer_html_textured = build_model_viewer_html(glb_name, save_folder, height=HTML_HEIGHT, width=HTML_WIDTH,
                                                          textured=True)
     torch.cuda.empty_cache()
 
     return (
         gr.update(value=path),
-        gr.update(value=path_textured),
+        gr.update(value=glb_path),
         model_viewer_html_textured,
         stats,
         seed,
@@ -376,7 +388,8 @@ def shape_generation(
     mesh.metadata['extras'] = stats
 
     path = export_mesh(mesh, save_folder, textured=False)
-    model_viewer_html = build_model_viewer_html(save_folder, height=HTML_HEIGHT, width=HTML_WIDTH)
+    glb_name = os.path.basename(path)
+    model_viewer_html = build_model_viewer_html(glb_name, save_folder, height=HTML_HEIGHT, width=HTML_WIDTH)
     return (
         gr.update(value=path),
         model_viewer_html,
@@ -664,8 +677,9 @@ def build_app():
 
                 # for preview
                 save_folder = gen_save_folder()
-                _ = export_mesh(mesh, save_folder, textured=True)
-                model_viewer_html = build_model_viewer_html(save_folder, height=HTML_HEIGHT, width=HTML_WIDTH,
+                path = export_mesh(mesh, save_folder, textured=True)
+                glb_name = os.path.basename(path)
+                model_viewer_html = build_model_viewer_html(glb_name, save_folder, height=HTML_HEIGHT, width=HTML_WIDTH,
                                                             textured=True)
             else:
                 mesh = trimesh.load(file_out)
@@ -679,7 +693,8 @@ def build_app():
                 # for preview
                 save_folder = gen_save_folder()
                 _ = export_mesh(mesh, save_folder, textured=False)
-                model_viewer_html = build_model_viewer_html(save_folder, height=HTML_HEIGHT, width=HTML_WIDTH,
+                glb_name = os.path.basename(path)
+                model_viewer_html = build_model_viewer_html(glb_name, save_folder, height=HTML_HEIGHT, width=HTML_WIDTH,
                                                             textured=False)
             print(f'export to {path}')
             return model_viewer_html, gr.update(value=path, interactive=True)

@@ -4,9 +4,9 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional
 
-LIST_TYPE = Union[list, np.ndarray, torch.Tensor]
+from .utils import LIST_TYPE
 
 
 def list_to_pt(
@@ -120,6 +120,8 @@ class Camera:
             sl = slice(index, index + 1)
         elif isinstance(index, slice):
             sl = index
+        elif isinstance(index, list):
+            sl = index
         else:
             raise NotImplementedError
 
@@ -156,11 +158,21 @@ def get_camera(
     aspect_wh: float = 1.0,
     near: float = 0.1,
     far: float = 100.0,
+    perturb_camera_position: Optional[float] = None,
     device: Optional[str] = None,
 ):
     if w2c is None:
         if c2w is None:
             c2w = get_c2w(elevation_deg, distance, azimuth_deg, num_views, device)
+            if perturb_camera_position is not None:
+                perturbed_pos = (
+                    c2w[:, :3, 3]
+                    + torch.randn_like(c2w[:, :3, 3]) * perturb_camera_position
+                )
+                perturbed_pos = (
+                    F.normalize(perturbed_pos, dim=-1)
+                    * ((c2w[:, :3, 3] ** 2).sum(-1) ** 0.5)[:, None]
+                )
         camera_positions = c2w[:, :3, 3]
         w2c = torch.linalg.inv(c2w)
     else:

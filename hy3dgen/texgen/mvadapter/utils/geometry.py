@@ -90,8 +90,8 @@ def get_position_map_from_depth_ortho(
     v_coord = v_coord.type_as(depth).unsqueeze(0).expand(B, -1, -1)
 
     # Compute the position map using orthographic projection with ortho_scale
-    x = (u_coord - image_wh[0] / 2) / ortho_scale / image_wh[0]
-    y = (v_coord - image_wh[1] / 2) / ortho_scale / image_wh[1]
+    x = (u_coord - image_wh[0] / 2) * ortho_scale / image_wh[0]
+    y = (v_coord - image_wh[1] / 2) * ortho_scale / image_wh[1]
     z = depth
 
     # Concatenate to form the 3D coordinates in the camera frame

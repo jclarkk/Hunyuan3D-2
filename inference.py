@@ -2,6 +2,8 @@ import argparse
 import json
 import os
 import time
+
+import trimesh
 from uuid import uuid4
 
 import torch
@@ -12,6 +14,7 @@ from hy3dgen.rmbg import RMBGRemover
 from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline, FaceReducer, FloaterRemover, DegenerateFaceRemover, \
     MeshlibCleaner
 from hy3dgen.shapegen.utils import normalize_mesh
+from hy3dgen.texgen.mvadapter.pipelines.pipeline_texture import TexturePipelineOutput
 
 
 def run(args):
@@ -173,19 +176,25 @@ def run(args):
         t6 = time.time()
         print(f"Texture generation took {t6 - t5:.2f} seconds")
 
+    if isinstance(mesh, trimesh.Trimesh):
+        # Use image file name as output name
+        if image_path is not None:
+            output_name = os.path.splitext(os.path.basename(image_path))[0]
+        else:
+            output_name = str(uuid4()).replace('-', '')
+        mesh = normalize_mesh(mesh)
+        mesh.export(os.path.join(args.output_dir, '{}.glb'.format(output_name)))
+
+        print(f"Output saved to {args.output_dir}/{output_name}.glb")
+    elif isinstance(mesh, TexturePipelineOutput):
+        if mesh.pbr_model_save_path is not None:
+            glb_path = mesh.pbr_model_save_path
+        else:
+            glb_path = mesh.shaded_model_save_path
+
+        print(f"Output saved to {glb_path}")
+
     os.makedirs(args.output_dir, exist_ok=True)
-
-    # Use image file name as output name
-    if image_path is not None:
-        output_name = os.path.splitext(os.path.basename(image_path))[0]
-    else:
-        output_name = str(uuid4()).replace('-', '')
-
-    mesh = normalize_mesh(mesh)
-
-    mesh.export(os.path.join(args.output_dir, '{}.glb'.format(output_name)))
-
-    print(f"Output saved to {args.output_dir}/{output_name}.glb")
 
 
 if __name__ == "__main__":

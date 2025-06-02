@@ -8,6 +8,7 @@ from PIL import Image
 from hy3dgen.rmbg import RMBGRemover
 from hy3dgen.shapegen.utils import normalize_mesh
 from hy3dgen.texgen import Hunyuan3DPaintPipeline
+from hy3dgen.texgen.mvadapter.pipelines.pipeline_texture import TexturePipelineOutput
 
 
 def run(args):
@@ -20,8 +21,8 @@ def run(args):
     if args.remesh_method not in [None, 'im', 'bpt', 'None']:
         raise ValueError("Re-mesh type must be either 'im' or 'bpt'")
 
-    if args.texture_size not in [1024, 2048, 3072, 4096]:
-        raise ValueError("Texture size must be one of 1024, 2048, 3072, 4096")
+    if args.texture_size not in [1024, 2048, 3072, 4096, 8192]:
+        raise ValueError("Texture size must be one of 1024, 2048, 3072, 4096, 8192")
 
     if args.unwrap_method not in ['xatlas', 'open3d', 'bpy']:
         raise ValueError("Unwrap method must be either 'xatlas', 'open3d' or 'bpy'")
@@ -107,6 +108,10 @@ def run(args):
     t5 = time.time()
     print(f"Image processing took {t5 - t4:.2f} seconds")
 
+    # Use mesh file name as output name
+    output_name = os.path.splitext(os.path.basename(args.mesh_path))[0] + '_textured'
+    os.makedirs(args.output_dir, exist_ok=True)
+
     # Generate texture
     t6 = time.time()
     mesh = texture_pipeline(
@@ -118,21 +123,25 @@ def run(args):
         debug=args.debug,
         texture_size=args.texture_size,
         enhance_texture_angles=args.enhance_texture_angles,
-        seed=args.seed
+        seed=args.seed,
+        output_dir=args.output_dir,
+        output_name=output_name,
     )
     t7 = time.time()
-    print(f"Texture generation took {t7 - t6:.2f} seconds")
+    if isinstance(mesh, trimesh.Trimesh):
+        print(f"Texture generation took {t7 - t6:.2f} seconds")
 
-    os.makedirs(args.output_dir, exist_ok=True)
+        mesh = normalize_mesh(mesh)
 
-    # Use mesh file name as output name
-    output_name = os.path.splitext(os.path.basename(args.mesh_path))[0] + '_textured'
+        mesh.export(os.path.join(args.output_dir, '{}.glb'.format(output_name)))
 
-    mesh = normalize_mesh(mesh)
-
-    mesh.export(os.path.join(args.output_dir, '{}.glb'.format(output_name)))
-
-    print(f"Output saved to {args.output_dir}/{output_name}.glb")
+        print(f"Output saved to {args.output_dir}/{output_name}.glb")
+    elif isinstance(mesh, TexturePipelineOutput):
+        if mesh.pbr_model_save_path is not None:
+            glb_path = mesh.pbr_model_save_path
+        else:
+            glb_path = mesh.shaded_model_save_path
+        print(f"Output saved to {glb_path}")
     print(f"Total time taken: {t7 - t0:.2f} seconds")
 
 
