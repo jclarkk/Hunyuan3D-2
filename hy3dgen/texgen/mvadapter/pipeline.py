@@ -301,8 +301,6 @@ class MVAdapterPipelineWrapper:
                 pos_images[i].save(os.path.join(debug_dir, f"orig_pos_view_{i}_{source}.png"))
                 normal_images[i].save(os.path.join(debug_dir, f"orig_norm_view_{i}_{source}.png"))
 
-        generator = torch.Generator(device=self.device).manual_seed(seed) if seed != -1 else None
-
         # Process in batches
         generator = torch.Generator(device=self.device).manual_seed(seed) if seed != -1 else None
         all_images = []

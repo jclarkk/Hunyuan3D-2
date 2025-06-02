@@ -437,7 +437,8 @@ class Hunyuan3DPaintPipeline:
                 rgb_images=multiviews,
                 base_color_images=None,
                 orm_images=orm_images,
-                normal_images=None
+                normal_images=None,
+                debug_mode=debug
             )
             t1 = time.time()
             print(f"Texture baking with MV-Adapter took {t1 - t0:.2f} seconds")
