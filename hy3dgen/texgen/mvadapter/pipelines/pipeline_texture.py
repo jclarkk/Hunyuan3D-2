@@ -133,7 +133,7 @@ class TexturePipeline:
         clear()
 
         if debug_mode:
-            debug_dir = os.path.join(save_dir, "debug")
+            debug_dir = './debug'
             os.makedirs(debug_dir, exist_ok=True)
 
         if uv_unwarp:

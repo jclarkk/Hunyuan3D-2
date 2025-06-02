@@ -255,6 +255,9 @@ class Hunyuan3DPaintPipeline:
                  seed=42,
                  output_dir='./output',
                  output_name='textured_mesh'):
+        if debug:
+            os.makedirs('./debug', exist_ok=True)
+
         self.config.texture_size = texture_size
         self.render.set_default_texture_resolution(texture_size)
 
@@ -335,7 +338,7 @@ class Hunyuan3DPaintPipeline:
         if debug:
             for i in range(len(multiviews)):
                 image = multiviews[i]
-                image.save(f'debug_multiview_{i}.png')
+                image.save(f'./debug/debug_multiview_{i}.png')
 
         if upscale_model == 'Aura':
             from .upscalers.pipelines import AuraSRUpscalerPipeline
