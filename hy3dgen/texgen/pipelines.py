@@ -427,20 +427,29 @@ class Hunyuan3DPaintPipeline:
                     )
                     orm_images.append(orm_image)
 
+
+            # Lets write all files like MV-Adapter expects
+            output_dir = os.path.join(output_dir, 'mvadapter')
+            os.makedirs(output_dir, exist_ok=True)
+
+            mesh_path = os.path.join(output_dir, f'tmp.glb')
+            mesh.export(mesh_path)
+
+            from .mvadapter.utils.saving import make_image_grid
+            mv_path = os.path.join(output_dir, 'multiviews.png')
+            make_image_grid(multiviews, rows=1).save(mv_path)
+
             print('Baking texture with MV-Adapter...')
             t0 = time.time()
             textured_mesh = texture_pipeline(
-                mesh=mesh,
+                mesh_path=mesh_path,
                 move_to_center=True,
                 save_dir=output_dir,
                 save_name=output_name,
                 uv_unwarp=True,
                 preprocess_mesh=False,
                 uv_size=self.config.texture_size,
-                rgb_images=multiviews,
-                base_color_images=None,
-                orm_images=orm_images,
-                normal_images=None,
+                rgb_path=mv_path,
                 debug_mode=debug
             )
             t1 = time.time()
