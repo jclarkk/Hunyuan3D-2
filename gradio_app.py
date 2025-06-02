@@ -506,7 +506,7 @@ def build_app():
                             num_chunks = gr.Slider(maximum=5000000, minimum=1000, value=8000,
                                                    label='Number of Chunks', min_width=100)
                         with gr.Row():
-                            texture_size = gr.Slider(minimum=1024, maximum=4096, step=1024, value=2048,
+                            texture_size = gr.Slider(minimum=1024, maximum=8192, step=1024, value=2048,
                                                      label='Texture Resolution')
                             enhance_texture = gr.Checkbox(label='Enhance Texture Angles', value=False)
                             pbr = gr.Checkbox(label='PBR Texture (Experimental, use the README in folder)', value=False)
@@ -515,7 +515,7 @@ def build_app():
                                                  value='None')
                         uv_unwrap_method = gr.Radio(['xatlas', 'open3d', 'bpy'], label='UV Unwrap Method',
                                                     value='xatlas')
-                        super_resolution = gr.Radio(['None', 'Aura', 'RealESRGAN', 'InvSR', 'Flux', 'SD-Upscaler'],
+                        super_resolution = gr.Radio(['None', 'Aura', 'NMKD', 'InvSR', 'Flux', 'SD-Upscaler'],
                                                     label='Super-Resolution (Install the method required, use README in folder)',
                                                     value='None')
                     with gr.Tab("Export", id='tab_export'):

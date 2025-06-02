@@ -343,9 +343,9 @@ class Hunyuan3DPaintPipeline:
         if upscale_model == 'Aura':
             from .upscalers.pipelines import AuraSRUpscalerPipeline
             upscaler = AuraSRUpscalerPipeline.from_pretrained()
-        elif upscale_model == 'RealESRGAN':
-            from .upscalers.pipelines import RealESRGANUpscalerPipeline
-            upscaler = RealESRGANUpscalerPipeline.from_pretrained(self.config.device)
+        elif upscale_model == 'NMKD':
+            from .upscalers.pipelines import NMKDSiaxUpscalerPipeline
+            upscaler = NMKDSiaxUpscalerPipeline.from_pretrained(self.config.device)
         elif upscale_model == 'InvSR':
             from .upscalers.pipelines import InvSRUpscalerPipeline
             upscaler = InvSRUpscalerPipeline.from_pretrained(self.config.device)
