@@ -279,22 +279,6 @@ class Hunyuan3DPaintPipeline:
             t1 = time.time()
             print(f"Light and shadow removal took {t1 - t0:.2f} seconds")
 
-        print('Wrapping UV...')
-        t0 = time.time()
-        if unwrap_method == 'open3d':
-            from .utils.uv_warp_utils import open3d_mesh_uv_wrap
-            mesh = open3d_mesh_uv_wrap(mesh, resolution=texture_size)
-        elif unwrap_method == 'bpy':
-            from .utils.uv_warp_utils import bpy_unwrap_mesh
-            mesh = bpy_unwrap_mesh(mesh)
-        elif unwrap_method == 'xatlas':
-            from .utils.uv_warp_utils import mesh_uv_wrap
-            mesh = mesh_uv_wrap(mesh, resolution=texture_size)
-        else:
-            raise ValueError(f"Invalid unwrap method {unwrap_method}")
-        t1 = time.time()
-        print(f"UV wrapping took {t1 - t0:.2f} seconds")
-
         self.render.load_mesh(mesh)
 
         if enhance_texture_angles:
@@ -459,6 +443,24 @@ class Hunyuan3DPaintPipeline:
             print(f"Texture baking with MV-Adapter took {t1 - t0:.2f} seconds")
         else:
             # Use Hunyuan3D for texture baking
+            print('Wrapping UV...')
+            t0 = time.time()
+            if unwrap_method == 'open3d':
+                from .utils.uv_warp_utils import open3d_mesh_uv_wrap
+                mesh = open3d_mesh_uv_wrap(mesh, resolution=texture_size)
+            elif unwrap_method == 'bpy':
+                from .utils.uv_warp_utils import bpy_unwrap_mesh
+                mesh = bpy_unwrap_mesh(mesh)
+            elif unwrap_method == 'xatlas':
+                from .utils.uv_warp_utils import mesh_uv_wrap
+                mesh = mesh_uv_wrap(mesh, resolution=texture_size)
+            else:
+                raise ValueError(f"Invalid unwrap method {unwrap_method}")
+            t1 = time.time()
+            print(f"UV wrapping took {t1 - t0:.2f} seconds")
+
+            self.render.load_mesh(mesh)
+
             normal_texture, metallic_roughness_texture, metallic_factor, roughness_factor = None, None, None, None
             if pbr:
                 from .pbr.pipelines import RGB2XPipeline
