@@ -54,15 +54,12 @@ class TexturePipelineOutput:
 
 
 class TexturePipeline:
-    def __init__(self, upscaler_ckpt_path: str, inpaint_ckpt_path: str, device: str):
+    def __init__(self, inpaint_ckpt_path: str, device: str):
         self.device = device
         self.ctx = NVDiffRastContextWrapper(device=self.device)
         self.cam_proj = CameraProjection(
             pb_backend="torch-cuda", bg_remover=None, device=self.device
         )
-        if upscaler_ckpt_path is not None:
-            self.upscaler = ModelLoader().load_from_file(upscaler_ckpt_path)
-            self.upscaler.to(self.device).eval().half()
         if inpaint_ckpt_path is not None:
             self.inpainter = ModelLoader().load_from_file(inpaint_ckpt_path)
             self.inpainter.to(self.device).eval()
@@ -76,31 +73,6 @@ class TexturePipeline:
         images = np.array_split(np.array(packed_image), 6, axis=1)
         images = [Image.fromarray(im) for im in images]
         return images
-
-    def maybe_upscale_image(
-        self,
-        tensor: Optional[torch.FloatTensor],
-        upscale: bool,
-        upscale_factor: int,
-        batched: bool = False,
-        use_topaz: bool = False,
-    ) -> Optional[torch.FloatTensor]:
-        if upscale:
-            with torch.no_grad():
-                tensor = tensor.permute(0, 3, 1, 2)
-                if batched:
-                    tensor = self.upscaler(tensor.half()).float()
-                else:
-                    tensor = torch.concat(
-                        [
-                            self.upscaler(im.unsqueeze(0).half()).float()
-                            for im in tensor
-                        ],
-                        dim=0,
-                    )
-                tensor = tensor.clamp(0, 1).permute(0, 2, 3, 1)
-            clear()
-        return tensor
 
     def view_inpaint(
         self,
@@ -218,12 +190,6 @@ class TexturePipeline:
                 continue
             mod_images = self.load_packed_images(mod_path)
             mod_tensor = image_to_tensor(mod_images, device=self.device)
-            mod_tensor = self.maybe_upscale_image(
-                mod_tensor,
-                mod_process_config.view_upscale,
-                mod_process_config.view_upscale_factor,
-                use_topaz=use_topaz
-            )
             if mod_process_config.view_upscale and debug_mode:
                 make_image_grid(tensor_to_image(mod_tensor, batched=True), rows=1).save(
                     os.path.join(debug_dir, f"{mod_name}_upscaled.jpg")
