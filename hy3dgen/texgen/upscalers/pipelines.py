@@ -100,17 +100,12 @@ class NMKDSiaxUpscalerPipeline:
         to_pil = transforms.ToPILImage()
         to_tensor = transforms.ToTensor()
 
-        tensor = torch.concat(
-            [
-                self.model(im.unsqueeze(0).half()).float()
-                for im in to_tensor(input_image)
-            ],
-            dim=0,
-        )
+        input_tensor = to_tensor(input_image).unsqueeze(0).to(self.device).half()
 
-        tensor = tensor.clamp(0, 1).permute(0, 2, 3, 1)
+        with torch.no_grad():
+            output = self.model(input_tensor).float().clamp(0, 1).squeeze(0).cpu()
 
-        return to_pil(tensor)
+        return to_pil(output)
 
 
 class AuraSRUpscalerPipeline:
