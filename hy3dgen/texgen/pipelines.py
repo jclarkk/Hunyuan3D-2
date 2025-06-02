@@ -429,14 +429,14 @@ class Hunyuan3DPaintPipeline:
 
 
             # Lets write all files like MV-Adapter expects
-            output_dir = os.path.join(output_dir, 'mvadapter')
-            os.makedirs(output_dir, exist_ok=True)
+            mv_input_dir = os.path.join(output_dir, 'mvadapter')
+            os.makedirs(mv_input_dir, exist_ok=True)
 
-            mesh_path = os.path.join(output_dir, f'tmp.glb')
+            mesh_path = os.path.join(mv_input_dir, f'tmp.glb')
             mesh.export(mesh_path)
 
             from .mvadapter.utils.saving import make_image_grid
-            mv_path = os.path.join(output_dir, 'multiviews.png')
+            mv_path = os.path.join(mv_input_dir, 'multiviews.png')
             make_image_grid(multiviews, rows=1).save(mv_path)
 
             print('Baking texture with MV-Adapter...')
