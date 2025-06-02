@@ -436,8 +436,8 @@ class Hunyuan3DPaintPipeline:
                 base_color_images=None,
                 orm_images=orm_images,
                 normal_images=None,
-                camera_elevation_deg=selected_camera_elevs,
-                camera_azimuth_deg=selected_camera_azims,
+                camera_elevation_deg=[x - 90 for x in selected_camera_elevs],
+                camera_azimuth_deg=[x - 90 for x in selected_camera_azims],
             )
             t1 = time.time()
             print(f"Texture baking with MV-Adapter took {t1 - t0:.2f} seconds")

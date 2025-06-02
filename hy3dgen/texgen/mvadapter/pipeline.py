@@ -1,13 +1,12 @@
 import numpy as np
 import torch
 from PIL import Image
-from diffusers import AutoencoderKL
+from diffusers import AutoencoderKL, DPMSolverMultistepScheduler
 from rembg import remove
 from typing import List, Union
 
 from .models.attention_processor import DecoupledMVRowColSelfAttnProcessor2_0
 from .pipelines.pipeline_mvadapter_i2mv_sdxl import MVAdapterI2MVSDXLPipeline
-from .schedulers.scheduling_shift_snr import ShiftSNRScheduler
 from .utils import get_orthogonal_camera, tensor_to_image
 
 
@@ -39,8 +38,11 @@ class MVAdapterPipelineWrapper:
 
         pipe.safety_checker = None
 
-        pipe.scheduler = ShiftSNRScheduler.from_scheduler(
-            pipe.scheduler, shift_mode="interpolated", shift_scale=8.0
+        pipe.scheduler = DPMSolverMultistepScheduler.from_config(
+            pipe.scheduler.config,
+            algorithm_type="dpmsolver++",
+            use_karras_sigmas=True,
+            solver_order=2
         )
         pipe.init_custom_adapter(num_views=6, self_attn_processor=DecoupledMVRowColSelfAttnProcessor2_0)
         pipe.load_custom_adapter(
