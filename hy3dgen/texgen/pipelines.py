@@ -290,18 +290,20 @@ class Hunyuan3DPaintPipeline:
                 (self.config.candidate_camera_elevs, self.config.candidate_camera_azims,
                  self.config.candidate_view_weights)
 
-        print('Rendering normal maps...')
-        t0 = time.time()
-        normal_maps = self.render_normal_multiview(
-            selected_camera_elevs, selected_camera_azims, use_abs_coor=True)
-        position_maps = self.render_position_multiview(
-            selected_camera_elevs, selected_camera_azims)
-        t1 = time.time()
-        print(f"Rendering normal and position maps took {t1 - t0:.2f} seconds")
-        if debug:
-            for i in range(len(normal_maps)):
-                normal_maps[i].save(f'debug_normal_map_{i}.png')
-                position_maps[i].save(f'debug_position_map_{i}.png')
+        normal_maps, position_maps = None, None
+        if self.config.mv_model != 'mv-adapter':
+            print('Rendering normal maps...')
+            t0 = time.time()
+            normal_maps = self.render_normal_multiview(
+                selected_camera_elevs, selected_camera_azims, use_abs_coor=True)
+            position_maps = self.render_position_multiview(
+                selected_camera_elevs, selected_camera_azims)
+            t1 = time.time()
+            print(f"Rendering normal and position maps took {t1 - t0:.2f} seconds")
+            if debug:
+                for i in range(len(normal_maps)):
+                    normal_maps[i].save(f'debug_normal_map_{i}.png')
+                    position_maps[i].save(f'debug_position_map_{i}.png')
 
         if enhance_texture_angles:
             camera_info = [
@@ -435,9 +437,7 @@ class Hunyuan3DPaintPipeline:
                 rgb_images=multiviews,
                 base_color_images=None,
                 orm_images=orm_images,
-                normal_images=None,
-                camera_elevation_deg=selected_camera_elevs,
-                camera_azimuth_deg=[x - 90 for x in selected_camera_azims],
+                normal_images=None
             )
             t1 = time.time()
             print(f"Texture baking with MV-Adapter took {t1 - t0:.2f} seconds")

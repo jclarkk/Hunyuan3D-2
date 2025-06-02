@@ -215,7 +215,7 @@ class MVAdapterPipelineWrapper:
                  control_conditioning_scale: float = 1.0,
                  prompt: str = "high quality",
                  negative_prompt: str = "watermark, ugly, deformed, noisy, blurry, low contrast",
-                 use_mesh_renderer: bool = False,
+                 use_mesh_renderer: bool = True,
                  lora_scale: float = 1.0,
                  batch_size: int = 6,
                  save_debug_images: bool = False):
