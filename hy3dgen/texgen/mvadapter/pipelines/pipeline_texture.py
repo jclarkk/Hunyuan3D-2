@@ -100,7 +100,7 @@ class TexturePipeline:
         save_name: str = "default",
         # mesh load settings
         move_to_center: bool = False,
-        front_x: bool = True,
+        front_x: bool = False,
         # uv unwarp
         uv_unwarp: bool = False,
         preprocess_mesh: bool = False,
@@ -125,7 +125,7 @@ class TexturePipeline:
         camera_elevation_deg: List[float] = [0, 0, 0, 0, 89.99, -89.99],
         camera_azimuth_deg: List[float] = [0, 90, 180, 270, 180, 180],
         camera_distance: float = 1.0,
-        camera_ortho_scale: float = 1.2,
+        camera_ortho_scale: float = 1.1,
         camera_fov_deg: float = 40,
         # debug
         debug_mode: bool = False,
