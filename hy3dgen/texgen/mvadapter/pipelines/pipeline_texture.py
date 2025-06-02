@@ -110,7 +110,7 @@ class TexturePipeline:
         save_name: str = "default",
         # mesh load settings
         move_to_center: bool = False,
-        front_x: bool = True,
+        front_x: bool = False,
         # uv unwarp
         uv_unwarp: bool = False,
         preprocess_mesh: bool = False,
@@ -154,7 +154,7 @@ class TexturePipeline:
 
         mesh: TexturedMesh = load_mesh(
             mesh_path,
-            rescale=True,
+            rescale=False,
             move_to_center=move_to_center,
             front_x_to_y=front_x,
             default_uv_size=uv_size,
