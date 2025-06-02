@@ -327,10 +327,10 @@ def generation_all(
     stats['time']['texture generation'] = time.time() - tmp_time
     stats['time']['total'] = time.time() - start_time_0
 
-    if isinstance(mesh, trimesh.Trimesh):
+    if isinstance(textured_mesh, trimesh.Trimesh):
         textured_mesh.metadata['extras'] = stats
         glb_path = export_mesh(textured_mesh, save_folder, textured=True)
-    elif isinstance(mesh, TexturePipelineOutput):
+    elif isinstance(textured_mesh, TexturePipelineOutput):
         if textured_mesh.pbr_model_save_path is not None:
             glb_path = textured_mesh.pbr_model_save_path
         else:
