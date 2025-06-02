@@ -322,6 +322,7 @@ def generation_all(
         unwrap_method=uv_unwrap_method,
         output_dir=save_folder,
         output_name='textured_mesh',
+        debug=True
     )
     logger.info("---Texture Generation takes %s seconds ---" % (time.time() - tmp_time))
     stats['time']['texture generation'] = time.time() - tmp_time

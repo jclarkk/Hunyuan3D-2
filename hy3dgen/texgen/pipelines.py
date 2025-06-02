@@ -329,7 +329,7 @@ class Hunyuan3DPaintPipeline:
             multiviews = self.models['multiview_model'](images_prompt, normal_maps + position_maps, camera_info)
         elif self.config.mv_model == 'mv-adapter':
             multiviews = self.models['multiview_model'](mesh, images_prompt[0], normal_maps, position_maps, camera_info,
-                                                        len(selected_camera_azims), seed=seed)
+                                                        len(selected_camera_azims), seed=seed, save_debug_images=debug)
         else:
             raise ValueError(f"Invalid MV model {self.config.mv_model}")
         t1 = time.time()
@@ -375,7 +375,7 @@ class Hunyuan3DPaintPipeline:
                     rgb_img = upscaler(rgb_img)
 
                     if debug:
-                        rgb_img.save(f'debug_multiview_{i}_upscaled.png')
+                        rgb_img.save(f'./debug/debug_multiview_{i}_upscaled.png')
 
                 rgb_img = rgb_img.resize((self.config.texture_size, self.config.texture_size))
 
@@ -393,7 +393,7 @@ class Hunyuan3DPaintPipeline:
                 multiviews[i] = multiviews[i].resize(
                     (self.config.texture_size, self.config.texture_size))
                 if debug:
-                    multiviews[i].save(f'debug_multiview_{i}.png')
+                    multiviews[i].save(f'./debug/debug_multiview_{i}.png')
 
         roughness_multiviews, metallic_multiviews = [], []
         if pbr:

@@ -253,7 +253,7 @@ class MVAdapterPipelineWrapper:
         # Optionally save control images, position maps, and normal maps for visual inspection
         if save_debug_images:
             import os
-            debug_dir = "debug_control_images"
+            debug_dir = "./debug"
             os.makedirs(debug_dir, exist_ok=True)
 
             pos_tensor = control_images[:, :3, :, :]
