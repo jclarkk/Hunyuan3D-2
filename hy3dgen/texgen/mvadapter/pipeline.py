@@ -92,7 +92,9 @@ class MVAdapterPipelineWrapper:
 
         return image
 
-    def generate_control_images_from_mesh(self, mesh, num_views, height=768, width=768):
+    def generate_control_images_from_mesh(self, mesh, num_views, height=768, width=768,
+                                          camera_elevation_deg=[0, 0, 0, 0, 89.99, -89.99],
+                                          camera_azimuth_deg=[0, 90, 180, 270, 180, 180]):
         """
         Generate control images from a mesh using the original pipeline's approach.
         """
@@ -104,13 +106,13 @@ class MVAdapterPipelineWrapper:
 
         # Prepare cameras using the same parameters as the original implementation
         cameras = get_orthogonal_camera(
-            elevation_deg=[0, 0, 0, 0, 89.99, -89.99],
+            elevation_deg=camera_elevation_deg,
             distance=[1.8] * num_views,
             left=-0.55,
             right=0.55,
             bottom=-0.55,
             top=0.55,
-            azimuth_deg=[x - 90 for x in [0, 90, 180, 270, 180, 180]],
+            azimuth_deg=[x - 90 for x in camera_azimuth_deg],
             device=self.device,
         )
 
@@ -179,6 +181,8 @@ class MVAdapterPipelineWrapper:
                  normal_maps: List[Image.Image] = None,
                  position_maps: List[Image.Image] = None,
                  camera_info: List[int] = None,
+                 camera_elevation_deg: List[int] = [0, 0, 0, 0, 89.99, -89.99],
+                 camera_azimuth_deg: List[int] = [0, 90, 180, 270, 180, 180],
                  num_views: int = 6,
                  seed: int = 42,
                  height: int = 1024,
@@ -238,7 +242,12 @@ class MVAdapterPipelineWrapper:
         if use_mesh_renderer and mesh is not None:
             # Use the MV-Adapter mesh rendering approach
             control_images, pos_images, normal_images = self.generate_control_images_from_mesh(
-                mesh, num_views, height, width
+                mesh,
+                num_views,
+                height,
+                width,
+                camera_azimuth_deg=camera_azimuth_deg,
+                camera_elevation_deg=camera_elevation_deg
             )
             source = "mesh"
         elif normal_maps is not None and position_maps is not None:

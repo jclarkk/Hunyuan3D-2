@@ -66,10 +66,19 @@ class TexturePipeline:
 
         self.smart_painter = SmartPainter(self.device)
 
+    @staticmethod
+    def open_large_image(path):
+        original_limit = Image.MAX_IMAGE_PIXELS
+        try:
+            Image.MAX_IMAGE_PIXELS = None
+            return Image.open(path)
+        finally:
+            Image.MAX_IMAGE_PIXELS = original_limit
+
     def load_packed_images(self, packed_image_path: Optional[str]) -> List[Image.Image]:
         if packed_image_path is None:
             return None
-        packed_image = Image.open(packed_image_path)
+        packed_image = self.open_large_image(packed_image_path)
         images = np.array_split(np.array(packed_image), 6, axis=1)
         images = [Image.fromarray(im) for im in images]
         return images
@@ -167,7 +176,7 @@ class TexturePipeline:
         elif camera_projection_type == "ORTHO":
             cameras = get_orthogonal_camera(
                 elevation_deg=camera_elevation_deg,
-                distance=[camera_distance] * 6,
+                distance=[camera_distance] * len(camera_azimuth_deg),
                 left=-camera_ortho_scale / 2,
                 right=camera_ortho_scale / 2,
                 bottom=-camera_ortho_scale / 2,

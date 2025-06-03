@@ -328,8 +328,16 @@ class Hunyuan3DPaintPipeline:
         if self.config.mv_model in ['hunyuan3d-paint-v2-0', 'hunyuan3d-paint-v2-0-turbo']:
             multiviews = self.models['multiview_model'](images_prompt, normal_maps + position_maps, camera_info)
         elif self.config.mv_model == 'mv-adapter':
-            multiviews = self.models['multiview_model'](mesh, images_prompt[0], normal_maps, position_maps, camera_info,
-                                                        len(selected_camera_azims), seed=seed, save_debug_images=debug)
+            multiviews = self.models['multiview_model'](mesh,
+                                                        images_prompt[0],
+                                                        normal_maps,
+                                                        position_maps,
+                                                        camera_info,
+                                                        len(selected_camera_azims),
+                                                        camera_elevation_deg=selected_camera_elevs,
+                                                        camera_azimuth_deg=selected_camera_azims,
+                                                        seed=seed,
+                                                        save_debug_images=debug)
         else:
             raise ValueError(f"Invalid MV model {self.config.mv_model}")
         t1 = time.time()
@@ -414,19 +422,8 @@ class Hunyuan3DPaintPipeline:
             # Use MV-Adapter for texture baking
             texture_pipeline = TexturePipeline(self.config.mv_adapter_inpaint_weights,
                                                device=self.config.device)
-
-            orm_images = None
-            if len(roughness_multiviews) > 0 and len(metallic_multiviews) > 0:
-                from .pbr.pipelines import RGB2XPipeline
-                # Combine roughness and metallic textures
-                orm_images = []
-                for i in range(len(roughness_multiviews)):
-                    orm_image = RGB2XPipeline.combine_roughness_metalness(
-                        roughness_multiviews[i],
-                        metallic_multiviews[i]
-                    )
-                    orm_images.append(orm_image)
-
+            print('Baking texture with MV-Adapter...')
+            t0 = time.time()
 
             # Lets write all files like MV-Adapter expects
             mv_input_dir = os.path.join(output_dir, 'mvadapter')
@@ -439,20 +436,51 @@ class Hunyuan3DPaintPipeline:
             mv_path = os.path.join(mv_input_dir, 'multiviews.png')
             make_image_grid(multiviews, rows=1).save(mv_path)
 
-            print('Baking texture with MV-Adapter...')
-            t0 = time.time()
-            textured_mesh = texture_pipeline(
-                mesh_path=mesh_path,
-                move_to_center=True,
-                save_dir=output_dir,
-                save_name=output_name,
-                uv_unwarp=True,
-                preprocess_mesh=False,
-                uv_size=self.config.texture_size,
-                rgb_path=mv_path,
-                rgb_process_config=ModProcessConfig(inpaint_mode='view'),
-                debug_mode=debug
-            )
+            if len(roughness_multiviews) > 0 and len(metallic_multiviews) > 0:
+                from .pbr.pipelines import RGB2XPipeline
+                # Combine roughness and metallic textures
+                orm_images = []
+                for i in range(len(roughness_multiviews)):
+                    orm_image = RGB2XPipeline.combine_roughness_metalness(
+                        roughness_multiviews[i],
+                        metallic_multiviews[i]
+                    )
+                    orm_images.append(orm_image)
+
+                orm_path = os.path.join(mv_input_dir, 'orm_multiviews.png')
+                make_image_grid(orm_images, rows=1).save(orm_path)
+
+                textured_mesh = texture_pipeline(
+                    mesh_path=mesh_path,
+                    move_to_center=True,
+                    save_dir=output_dir,
+                    save_name=output_name,
+                    uv_unwarp=True,
+                    preprocess_mesh=False,
+                    uv_size=self.config.texture_size,
+                    camera_elevation_deg=selected_camera_elevs,
+                    camera_azimuth_deg=selected_camera_azims,
+                    base_color_path=mv_path,
+                    base_color_process_config=ModProcessConfig(inpaint_mode='view'),
+                    orm_path=orm_path,
+                    orm_process_config=ModProcessConfig(inpaint_mode='view'),
+                    debug_mode=debug
+                )
+            else:
+                textured_mesh = texture_pipeline(
+                    mesh_path=mesh_path,
+                    move_to_center=True,
+                    save_dir=output_dir,
+                    save_name=output_name,
+                    uv_unwarp=True,
+                    preprocess_mesh=False,
+                    uv_size=self.config.texture_size,
+                    camera_elevation_deg=selected_camera_elevs,
+                    camera_azimuth_deg=selected_camera_azims,
+                    rgb_path=mv_path,
+                    rgb_process_config=ModProcessConfig(inpaint_mode='view'),
+                    debug_mode=debug
+                )
             t1 = time.time()
             print(f"Texture baking with MV-Adapter took {t1 - t0:.2f} seconds")
         else:
@@ -515,7 +543,8 @@ class Hunyuan3DPaintPipeline:
             print('Baking texture...')
             t0 = time.time()
             texture, mask = self.bake_from_multiview(multiviews,
-                                                     selected_camera_elevs, selected_camera_azims, selected_view_weights)
+                                                     selected_camera_elevs, selected_camera_azims,
+                                                     selected_view_weights)
             t1 = time.time()
             print(f"Texture baking with Hunyuan3D took {t1 - t0:.2f} seconds")
 
