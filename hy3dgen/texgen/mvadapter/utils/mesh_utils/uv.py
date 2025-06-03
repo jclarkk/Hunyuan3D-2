@@ -107,7 +107,16 @@ def uv_render_geometry(
                 scale=1.0, offset=0.0, clamp=False, bg_value=1e2
             ),
         )
-        outputs.append(batch_output)
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+        gc.collect()
+
+        print(f"[Render Batch {i}-{i + len(cam_batch) - 1}] "
+              f"Allocated: {torch.cuda.memory_allocated() / 1e9:.2f} GB | "
+              f"Reserved: {torch.cuda.memory_reserved() / 1e9:.2f} GB | "
+              f"Free (approx): {(torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_reserved()) / 1e9:.2f} GB")
+
+        outputs.append(out)
 
     def cat(tensor_list):
         return torch.cat(tensor_list, dim=0) if tensor_list[0] is not None else None
