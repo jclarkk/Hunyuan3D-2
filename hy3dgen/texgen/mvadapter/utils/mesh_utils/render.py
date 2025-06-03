@@ -219,6 +219,7 @@ def render(
         cam: Camera,
         height: int,
         width: int,
+        *,
         render_attr: bool = True,
         render_depth: bool = True,
         render_normal: bool = True,
@@ -230,69 +231,86 @@ def render(
         tangent_background: Union[float, torch.FloatTensor] = 0.0,
         texture_override=None,
         texture_filter_mode: str = "linear",
-        *,
-        dtype: torch.dtype = torch.float16
+        dtype: torch.dtype = torch.float16,
+        batch_size: int = 4
 ) -> RenderOutput:
-    output_dict = {}
-    v_pos_ = mesh.v_pos.to(dtype)
-    v_nrm_ = mesh.v_nrm.to(dtype) if render_normal else None
-    v_tang_ = mesh.v_tang.to(dtype) if render_tangent else None
-    v_tex_ = mesh.v_tex.to(dtype) if render_attr else None
-    mvp_mtx_ = cam.mvp_mtx.to(dtype)
-    w2c_ = cam.w2c.to(dtype)
+    B = len(cam)
+    H, W = height, width
+    dev = mesh.v_pos.device
 
-    v_pos_clip = get_clip_space_position(v_pos_, mvp_mtx_)
-    rast, _ = ctx.rasterize(v_pos_clip.float(), mesh.t_pos_idx, (height, width), grad_db=True)
-    mask = rast[..., 3] > 0
-    output_dict["mask"] = mask
+    acc_pos = torch.empty((B, H, W, 3), dtype=dtype, device=dev)
+    acc_mask = torch.empty((B, H, W), dtype=torch.bool, device=dev)
+    acc_attr = torch.empty((B, H, W, 3), dtype=dtype, device=dev) if render_attr else None
+    acc_depth = torch.empty((B, H, W), dtype=dtype, device=dev) if render_depth else None
+    acc_normal = torch.empty((B, H, W, 3), dtype=dtype, device=dev) if render_normal else None
+    acc_tang = torch.empty((B, H, W, 3), dtype=dtype, device=dev) if render_tangent else None
 
-    gb_pos, _ = ctx.interpolate(v_pos_[None], rast, mesh.t_pos_idx)
-    gb_pos = gb_pos.to(dtype)
-    output_dict["pos"] = gb_pos
+    for i in range(0, B, batch_size):
+        cam_b = cam[i:i + batch_size]
 
-    if render_depth:
-        gb_pos_vs = transform_points_homo(gb_pos, w2c_)
-        gb_depth = -gb_pos_vs[..., 2].to(dtype)
-        # min-depth background trick
-        gb_depth = torch.where(
-            mask, gb_depth,
-            gb_depth.view(gb_depth.shape[0], -1)
-            .min(dim=-1)[0][:, None, None]
-        )
-        gb_depth = depth_normalization_strategy(gb_depth, mask)
-        output_dict["depth"] = gb_depth
+        v_pos_ = mesh.v_pos.to(dtype)
+        mvp_ = cam_b.mvp_mtx.to(dtype)
 
-    if render_attr:
-        tex_c, _ = ctx.interpolate(v_tex_[None], rast, mesh.t_tex_idx)
-        texture = (texture_override if texture_override is not None else mesh.texture).to(dtype)
-        gb_rgb_fg = ctx.texture(texture[None], tex_c, filter_mode=texture_filter_mode).to(dtype)
-        gb_rgb_bg = torch.as_tensor(attr_background, dtype=dtype, device=gb_rgb_fg.device)
-        gb_rgb_bg = gb_rgb_bg.expand_as(gb_rgb_fg)
-        gb_rgb = torch.where(mask[..., None], gb_rgb_fg, gb_rgb_bg)
-        if antialias_attr:
-            gb_rgb = ctx.antialias(gb_rgb, rast, v_pos_clip.float(), mesh.t_pos_idx)
-        output_dict["attr"] = gb_rgb
+        v_pos_clip = get_clip_space_position(v_pos_, mvp_)
+        rast, _ = ctx.rasterize(v_pos_clip.float(), mesh.t_pos_idx, (H, W), grad_db=True)
+        mask = rast[..., 3] > 0  # bool
 
-    if render_normal:
-        gb_nrm, _ = ctx.interpolate(v_nrm_[None], rast, mesh.stitched_t_pos_idx)
-        gb_nrm = F.normalize(gb_nrm, dim=-1, p=2).to(dtype)
-        gb_nrm[~mask] = normal_background
-        output_dict["normal"] = gb_nrm
+        gb_pos, _ = ctx.interpolate(v_pos_[None], rast, mesh.t_pos_idx)
+        gb_pos = gb_pos.to(dtype)
 
-    if render_tangent:
-        gb_tang, _ = ctx.interpolate(v_tang_[None], rast, mesh.stitched_t_pos_idx)
-        gb_tang = F.normalize(gb_tang, dim=-1, p=2).to(dtype)
-        gb_tang[~mask] = tangent_background
-        output_dict["tangent"] = gb_tang
+        if render_depth:
+            gb_pos_vs = transform_points_homo(gb_pos, cam_b.w2c.to(dtype))
+            gb_depth = -gb_pos_vs[..., 2]
+            bg = gb_depth.view(gb_depth.shape[0], -1).min(dim=-1)[0][:, None, None]
+            gb_depth = torch.where(mask, gb_depth, bg)
+            gb_depth = depth_normalization_strategy(gb_depth, mask)  # strategy now dtype-aware
+            gb_depth = gb_depth.to(dtype)
 
-    for k, v in output_dict.items():
-        if isinstance(v, torch.Tensor):
-            if k == "mask":
-                output_dict[k] = v
-            else:
-                output_dict[k] = v.float()
+        if render_attr:
+            v_tex_ = mesh.v_tex.to(dtype)
+            tex_c, _ = ctx.interpolate(v_tex_[None], rast, mesh.t_tex_idx)
+            texture = (texture_override if texture_override is not None else mesh.texture).to(dtype)
+            gb_rgb_fg = ctx.texture(texture[None], tex_c, filter_mode=texture_filter_mode).to(dtype)
+            gb_rgb_bg = torch.as_tensor(attr_background, dtype=dtype, device=dev).expand_as(gb_rgb_fg)
+            gb_rgb = torch.where(mask[..., None], gb_rgb_fg, gb_rgb_bg)
+            if antialias_attr:
+                gb_rgb = ctx.antialias(gb_rgb, rast, v_pos_clip.float(), mesh.t_pos_idx)
 
-    return RenderOutput(**output_dict)
+        if render_normal:
+            v_nrm_ = mesh.v_nrm.to(dtype)
+            gb_nrm, _ = ctx.interpolate(v_nrm_[None], rast, mesh.stitched_t_pos_idx)
+            gb_nrm = F.normalize(gb_nrm, dim=-1, p=2)
+            gb_nrm[~mask] = normal_background
+
+        if render_tangent:
+            v_tan_ = mesh.v_tang.to(dtype)
+            gb_tan, _ = ctx.interpolate(v_tan_[None], rast, mesh.stitched_t_pos_idx)
+            gb_tan = F.normalize(gb_tan, dim=-1, p=2)
+            gb_tan[~mask] = tangent_background
+
+        sl = slice(i, i + cam_b.w2c.shape[0])
+        acc_pos[sl] = gb_pos
+        acc_mask[sl] = mask
+        if render_attr:   acc_attr[sl] = gb_rgb
+        if render_depth:  acc_depth[sl] = gb_depth
+        if render_normal: acc_normal[sl] = gb_nrm
+        if render_tangent: acc_tang[sl] = gb_tan
+
+        del rast, mask, gb_pos, cam_b
+        if render_attr:   del tex_c, gb_rgb_fg, gb_rgb
+        if render_depth:  del gb_pos_vs, gb_depth
+        if render_normal: del gb_nrm
+        if render_tangent: del gb_tan
+        torch.cuda.empty_cache()
+
+    return RenderOutput(
+        attr=acc_attr.float() if acc_attr is not None else None,
+        mask=acc_mask,
+        depth=acc_depth.float() if acc_depth is not None else None,
+        normal=acc_normal.float() if acc_normal is not None else None,
+        tangent=acc_tang.float() if acc_tang is not None else None,
+        pos=acc_pos.float()
+    )
 
 
 def tensor_to_image(
