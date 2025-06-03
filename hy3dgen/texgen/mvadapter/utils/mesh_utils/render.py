@@ -280,7 +280,8 @@ def render(
         if render_normal:
             v_nrm_ = mesh.v_nrm.to(dtype)
             gb_nrm, _ = ctx.interpolate(v_nrm_[None], rast, mesh.stitched_t_pos_idx)
-            gb_nrm = F.normalize(gb_nrm, dim=-1, p=2)
+            norm = torch.sum(gb_nrm * gb_nrm, dim=-1, keepdim=True).sqrt_().add_(1e-6)
+            gb_nrm.div_(norm)
             gb_nrm[~mask] = normal_background
 
         if render_tangent:
@@ -304,14 +305,16 @@ def render(
         if render_tangent: del gb_tan
         torch.cuda.empty_cache()
 
-    return RenderOutput(
-        attr=acc_attr.float() if acc_attr is not None else None,
-        mask=acc_mask,
-        depth=acc_depth.float() if acc_depth is not None else None,
-        normal=acc_normal.float() if acc_normal is not None else None,
-        tangent=acc_tang.float() if acc_tang is not None else None,
-        pos=acc_pos.float()
-    )
+    ret_attr = acc_attr.float() if acc_attr is not None else None
+    ret_depth = acc_depth.float() if acc_depth is not None else None
+    ret_normal = acc_normal.float() if acc_normal is not None else None
+    ret_tang = acc_tang.float() if acc_tang is not None else None
+    ret_pos = acc_pos.float()
+
+    del acc_attr, acc_depth, acc_normal, acc_tang, acc_pos  # free half-precision
+    torch.cuda.empty_cache()
+    return RenderOutput(attr=ret_attr, mask=acc_mask, depth=ret_depth,
+                        normal=ret_normal, tangent=ret_tang, pos=ret_pos)
 
 
 def tensor_to_image(
