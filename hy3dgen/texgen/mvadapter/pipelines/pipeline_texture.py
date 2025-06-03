@@ -276,26 +276,41 @@ class TexturePipeline:
                 uv_proj[~uv_valid_mask] = torch.as_tensor([0.5, 0.5, 1]).to(uv_proj)
             else:
                 # TODO: tweak depth_grad_dilation
-                cam_proj_out = self.cam_proj(
-                    mod_tensor,
-                    mesh,
-                    cameras,
-                    from_scratch=mod_process_config.inpaint_mode != "none",
-                    poisson_blending=False,
-                    depth_grad_dilation=5,
-                    depth_grad_threshold=0.1,
-                    uv_exp_blend_alpha=3,
-                    uv_exp_blend_view_weight=torch.as_tensor([1, 1, 1, 1, 1, 1]),
-                    aoi_cos_valid_threshold=0.2,
-                    uv_size=uv_size,
-                    uv_padding=not uv_inpaint_use_network,
-                    return_dict=True,
-                )
-                uv_proj, uv_valid_mask, uv_depth_grad = (
-                    cam_proj_out.uv_proj,
-                    cam_proj_out.uv_proj_mask,
-                    cam_proj_out.uv_depth_grad,
-                )
+                num_views = mod_tensor.shape[0]
+                camera_subset = cameras[:num_views]
+
+                batch_size = 6
+
+                all_uv_proj, all_uv_valid_mask, all_uv_depth_grad = [], [], []
+
+                for i in range(0, num_views, batch_size):
+                    batch_mod_tensor = mod_tensor[i:i + batch_size]
+                    batch_cameras = camera_subset[i:i + batch_size]
+                    batch_view_weight = torch.ones(len(batch_mod_tensor), device=self.device)
+
+                    cam_proj_out = self.cam_proj(
+                        batch_mod_tensor,
+                        mesh,
+                        batch_cameras,
+                        from_scratch=mod_process_config.inpaint_mode != "none",
+                        poisson_blending=False,
+                        depth_grad_dilation=5,
+                        depth_grad_threshold=0.1,
+                        uv_exp_blend_alpha=3,
+                        uv_exp_blend_view_weight=batch_view_weight,
+                        aoi_cos_valid_threshold=0.2,
+                        uv_size=uv_size,
+                        uv_padding=not uv_inpaint_use_network,
+                        return_dict=True,
+                    )
+                    all_uv_proj.append(cam_proj_out.uv_proj)
+                    all_uv_valid_mask.append(cam_proj_out.uv_proj_mask)
+                    all_uv_depth_grad.append(cam_proj_out.uv_depth_grad)
+
+                uv_proj = torch.cat(all_uv_proj, dim=0)
+                uv_valid_mask = torch.cat(all_uv_valid_mask, dim=0)
+                uv_depth_grad = torch.cat(all_uv_depth_grad, dim=0)
+
                 if uv_inpaint_use_network:
                     uv_inpaint_mask_input = 1 - uv_valid_mask[None, None].float()
                     uv_inpaint_image_input = uv_proj[None].permute(0, 3, 1, 2)
