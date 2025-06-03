@@ -516,7 +516,7 @@ def build_app():
                                                  value='None')
                         uv_unwrap_method = gr.Radio(['xatlas', 'open3d', 'bpy'], label='UV Unwrap Method',
                                                     value='xatlas')
-                        super_resolution = gr.Radio(['None', 'Aura', 'NMKD', 'InvSR', 'Flux', 'SD-Upscaler'],
+                        super_resolution = gr.Radio(['None', 'Aura', 'NMKD', 'InvSR', 'Flux', 'SD-Upscaler', 'Topaz'],
                                                     label='Super-Resolution (Install the method required, use README in folder)',
                                                     value='None')
                     with gr.Tab("Export", id='tab_export'):
