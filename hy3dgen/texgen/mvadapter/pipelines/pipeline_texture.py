@@ -2,6 +2,7 @@ import numpy as np
 import os
 import torch
 import torch.nn.functional as F
+import trimesh
 from PIL import Image
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -20,6 +21,7 @@ from ..utils.mesh_utils import (
     replace_mesh_texture_and_save,
 )
 from ..utils.mesh_utils.mesh_process import process_raw
+from ..utils.mesh_utils.mesh import get_bbox_scale
 
 
 def clear():
@@ -165,6 +167,12 @@ class TexturePipeline:
         if camera_projection_type == "PERSP":
             raise NotImplementedError
         elif camera_projection_type == "ORTHO":
+            tmesh = trimesh.load(mesh_path, force="mesh")
+
+            extent = get_bbox_scale(tmesh)
+            camera_ortho_scale = extent * 2.0
+            camera_distance = extent * 3.3
+
             cameras = get_orthogonal_camera(
                 elevation_deg=camera_elevation_deg,
                 distance=[camera_distance] * 6,
@@ -172,7 +180,7 @@ class TexturePipeline:
                 right=camera_ortho_scale / 2,
                 bottom=-camera_ortho_scale / 2,
                 top=camera_ortho_scale / 2,
-                azimuth_deg=[x - 90 for x in camera_azimuth_deg],  # -y as front
+                azimuth_deg=[x - 90 for x in camera_azimuth_deg],
                 device=self.device,
             )
 

@@ -518,3 +518,9 @@ def replace_mesh_texture_and_save(
         )
     else:
         raise NotImplementedError
+
+
+def get_bbox_scale(mesh: trimesh.Trimesh, margin: float = 1.05):
+    bbox = mesh.bounds
+    half_extent = (bbox[1] - bbox[0]).max() * 0.5
+    return half_extent * margin

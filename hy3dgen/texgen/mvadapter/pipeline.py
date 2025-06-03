@@ -2,12 +2,12 @@ import numpy as np
 import torch
 from PIL import Image
 from diffusers import AutoencoderKL, DPMSolverMultistepScheduler
-from rembg import remove
 from typing import List, Union
 
 from .models.attention_processor import DecoupledMVRowColSelfAttnProcessor2_0
 from .pipelines.pipeline_mvadapter_i2mv_sdxl import MVAdapterI2MVSDXLPipeline
 from .utils import get_orthogonal_camera, tensor_to_image
+from .utils.mesh_utils.mesh import get_bbox_scale
 
 
 class MVAdapterPipelineWrapper:
@@ -102,14 +102,12 @@ class MVAdapterPipelineWrapper:
         mesh_copy = mesh.copy()
         current_mesh = load_mesh(mesh_copy, rescale=False, device=self.device)
 
-        # Prepare cameras using the same parameters as the original implementation
+        extent = get_bbox_scale(mesh_copy)
         cameras = get_orthogonal_camera(
             elevation_deg=[0, 0, 0, 0, 89.99, -89.99],
-            distance=[1.8] * num_views,
-            left=-0.55,
-            right=0.55,
-            bottom=-0.55,
-            top=0.55,
+            distance=[extent * 3.3] * num_views,
+            left=-extent, right=extent,
+            bottom=-extent, top=extent,
             azimuth_deg=[x - 90 for x in [0, 90, 180, 270, 180, 180]],
             device=self.device,
         )
