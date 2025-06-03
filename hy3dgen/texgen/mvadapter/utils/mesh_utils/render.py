@@ -287,7 +287,10 @@ def render(
 
     for k, v in output_dict.items():
         if isinstance(v, torch.Tensor):
-            output_dict[k] = v.float()
+            if k == "mask":
+                output_dict[k] = v
+            else:
+                output_dict[k] = v.float()
 
     return RenderOutput(**output_dict)
 

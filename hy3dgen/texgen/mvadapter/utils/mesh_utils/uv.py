@@ -109,8 +109,7 @@ def uv_render_geometry(
         view_normal[:, :, :, None, :] * cam.w2c[:, None, None, :3, :3]
     ).sum(-1)
     view_normal_cs = F.normalize(view_normal_cs, dim=-1, p=2)
-    mask_bool = render_output.mask.bool()
-    view_normal_cs[~mask_bool] = render_output.normal.to(view_normal_cs.dtype)[~mask_bool]
+    view_normal_cs[~render_output.mask] = render_output.normal[~render_output.mask]
     view_aoi_cos = (
         view_normal_cs
         * torch.as_tensor(
