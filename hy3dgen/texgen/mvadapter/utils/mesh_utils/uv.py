@@ -1,3 +1,4 @@
+import gc
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional
@@ -116,7 +117,7 @@ def uv_render_geometry(
               f"Reserved: {torch.cuda.memory_reserved() / 1e9:.2f} GB | "
               f"Free (approx): {(torch.cuda.get_device_properties(0).total_memory - torch.cuda.memory_reserved()) / 1e9:.2f} GB")
 
-        outputs.append(out)
+        outputs.append(batch_output)
 
     def cat(tensor_list):
         return torch.cat(tensor_list, dim=0) if tensor_list[0] is not None else None

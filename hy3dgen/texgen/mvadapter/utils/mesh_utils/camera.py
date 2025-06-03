@@ -118,19 +118,20 @@ class Camera:
     def __getitem__(self, index):
         if isinstance(index, int):
             sl = slice(index, index + 1)
-        elif isinstance(index, slice):
-            sl = index
-        elif isinstance(index, list):
+        elif isinstance(index, slice) or isinstance(index, list):
             sl = index
         else:
             raise NotImplementedError
 
+        def safe_slice(tensor):
+            return tensor[sl].contiguous().clone() if tensor is not None else None
+
         return Camera(
-            c2w=self.c2w[sl] if self.c2w is not None else None,
-            w2c=self.w2c[sl],
-            proj_mtx=self.proj_mtx[sl],
-            mvp_mtx=self.mvp_mtx[sl],
-            cam_pos=self.cam_pos[sl] if self.cam_pos is not None else None,
+            c2w=safe_slice(self.c2w),
+            w2c=safe_slice(self.w2c),
+            proj_mtx=safe_slice(self.proj_mtx),
+            mvp_mtx=safe_slice(self.mvp_mtx),
+            cam_pos=safe_slice(self.cam_pos),
         )
 
     def to(self, device: Optional[str] = None):
