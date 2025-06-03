@@ -213,6 +213,7 @@ class SimpleNormalization(DepthNormalizationStrategy):
         return depth
 
 
+@torch.no_grad()
 def render(
         ctx: NVDiffRastContextWrapper,
         mesh: TexturedMesh,
