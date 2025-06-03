@@ -89,19 +89,38 @@ def uv_render_geometry(
     ).view(batch_size, height, width, 4)
     uv_pos_ndc = uv_pos_clip[..., :2] / uv_pos_clip[..., 3:4]
 
-    render_output = render(
-        ctx,
-        mesh,
-        cam,
-        view_height,
-        view_width,
-        render_attr=render_attr,
-        render_depth=True,
-        render_normal=True,
-        depth_normalization_strategy=SimpleNormalization(
-            scale=1.0, offset=0.0, clamp=False, bg_value=1e2
-        ),
+    batch_size = 4
+    outputs = []
+    for i in range(0, len(cam), batch_size):
+        cam_batch = cam[i:i + batch_size]
+
+        batch_output = render(
+            ctx,
+            mesh,
+            cam_batch,
+            view_height,
+            view_width,
+            render_attr=render_attr,
+            render_depth=True,
+            render_normal=True,
+            depth_normalization_strategy=SimpleNormalization(
+                scale=1.0, offset=0.0, clamp=False, bg_value=1e2
+            ),
+        )
+        outputs.append(batch_output)
+
+    def cat(tensor_list):
+        return torch.cat(tensor_list, dim=0) if tensor_list[0] is not None else None
+
+    render_output = type(outputs[0])(
+        attr=cat([o.attr for o in outputs]),
+        mask=cat([o.mask for o in outputs]),
+        depth=cat([o.depth for o in outputs]),
+        normal=cat([o.normal for o in outputs]),
+        tangent=cat([o.tangent for o in outputs]),
+        pos=cat([o.pos for o in outputs]),
     )
+
     view_position = render_output.pos
     view_mask = render_output.mask
     view_normal = render_output.normal
