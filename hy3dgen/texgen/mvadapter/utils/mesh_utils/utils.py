@@ -12,9 +12,9 @@ SINGLE_IMAGE_TYPE = Union[Image.Image, np.ndarray, torch.Tensor]
 
 
 def tensor_to_image(
-    data: Union[Image.Image, torch.Tensor, np.ndarray],
-    batched: bool = False,
-    format: str = "HWC",
+        data: Union[Image.Image, torch.Tensor, np.ndarray],
+        batched: bool = False,
+        format: str = "HWC",
 ) -> Union[Image.Image, List[Image.Image]]:
     if isinstance(data, Image.Image):
         return data
@@ -81,10 +81,10 @@ def largest_factor_near_sqrt(n: int) -> int:
 
 
 def make_image_grid(
-    images: List[Image.Image],
-    rows: Optional[int] = None,
-    cols: Optional[int] = None,
-    resize: Optional[int] = None,
+        images: List[Image.Image],
+        rows: Optional[int] = None,
+        cols: Optional[int] = None,
+        resize: Optional[int] = None,
 ) -> Image.Image:
     """
     Prepares a single grid of images. Useful for visualization purposes.
@@ -121,11 +121,12 @@ def get_clip_space_position(pos: torch.FloatTensor, mvp_mtx: torch.FloatTensor):
     return torch.matmul(pos_homo, mvp_mtx.permute(0, 2, 1))
 
 
-def transform_points_homo(pos: torch.FloatTensor, mtx: torch.FloatTensor):
-    batch_size = pos.shape[0]
+def transform_points_homo(pos: torch.FloatTensor,
+                          mtx: torch.FloatTensor) -> torch.FloatTensor:
+    B = pos.shape[0]
     pos_shape = pos.shape[1:-1]
-    pos = pos.reshape(batch_size, -1, 3)
-    pos_homo = torch.cat([pos, torch.ones_like(pos[..., 0:1])], dim=-1)
-    pos = (pos_homo.unsqueeze(2) * mtx.unsqueeze(1)).sum(-1)[..., :3]
-    pos = pos.reshape(batch_size, *pos_shape, 3)
-    return pos
+    pos = pos.reshape(B, -1, 3)
+    ones = torch.ones_like(pos[..., :1])
+    pos_homo = torch.cat((pos, ones), dim=-1)
+    pos_cam = torch.matmul(pos_homo, mtx.transpose(1, 2))[..., :3]
+    return pos_cam.reshape(B, *pos_shape, 3)
