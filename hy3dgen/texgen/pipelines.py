@@ -332,10 +332,9 @@ class Hunyuan3DPaintPipeline:
                                                         images_prompt[0],
                                                         normal_maps,
                                                         position_maps,
-                                                        camera_info,
-                                                        len(selected_camera_azims),
                                                         camera_elevation_deg=selected_camera_elevs,
                                                         camera_azimuth_deg=selected_camera_azims,
+                                                        num_views=len(selected_camera_azims),
                                                         seed=seed,
                                                         save_debug_images=debug)
         else:

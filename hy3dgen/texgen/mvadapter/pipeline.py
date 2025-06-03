@@ -180,7 +180,6 @@ class MVAdapterPipelineWrapper:
                  image_prompt: Union[str, Image.Image] = None,
                  normal_maps: List[Image.Image] = None,
                  position_maps: List[Image.Image] = None,
-                 camera_info: List[int] = None,
                  camera_elevation_deg: List[int] = [0, 0, 0, 0, 89.99, -89.99],
                  camera_azimuth_deg: List[int] = [0, 90, 180, 270, 180, 180],
                  num_views: int = 6,
@@ -205,7 +204,6 @@ class MVAdapterPipelineWrapper:
             image_prompt: Reference image for conditioning (can be path or PIL Image)
             normal_maps: List of normal maps if not using mesh renderer
             position_maps: List of position maps if not using mesh renderer
-            camera_info: List of camera information if not using mesh renderer
             num_views: Number of views to generate
             seed: Random seed for reproducibility
             height: Height of the generated images
