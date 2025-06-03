@@ -100,7 +100,7 @@ class MVAdapterPipelineWrapper:
 
         # Load the mesh
         mesh_copy = mesh.copy()
-        current_mesh = load_mesh(mesh_copy, rescale=False, device=self.device)
+        current_mesh = load_mesh(mesh_copy, rescale=True, move_to_center=True, device=self.device)
 
         extent = get_bbox_scale(mesh_copy)
         cameras = get_orthogonal_camera(
