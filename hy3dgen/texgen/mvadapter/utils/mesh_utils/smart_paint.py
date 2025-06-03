@@ -280,7 +280,7 @@ class SmartPainter:
                     from_scratch=False,
                     poisson_blending=False,
                     depth_grad_dilation=3,
-                    uv_exp_blend_alpha=3,
+                    uv_exp_blend_alpha=12,
                     aoi_cos_valid_threshold=0.1,
                     uv_size=mesh.uv_size,
                     uv_padding=True,
