@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from PIL import Image
 from diffusers import AutoencoderKL
+from rembg import remove
 from typing import List, Union
 
 from .models.attention_processor import DecoupledMVRowColSelfAttnProcessor2_0
@@ -60,36 +61,62 @@ class MVAdapterPipelineWrapper:
         self.pipeline = pipeline
         self.device = device
 
-    @staticmethod
-    def preprocess_reference_image(image: Image.Image, height, width):
-        image = np.array(image)
-        alpha = image[..., 3] > 0
-        H, W = alpha.shape
-        # get the bounding box of alpha
-        y, x = np.where(alpha)
-        y0, y1 = max(y.min() - 1, 0), min(y.max() + 1, H)
-        x0, x1 = max(x.min() - 1, 0), min(x.max() + 1, W)
-        image_center = image[y0:y1, x0:x1]
-        # resize the longer side to H * 0.9
-        H, W, _ = image_center.shape
+    def preprocess_reference_image(self, image: Image.Image, height: int, width: int) -> Image.Image:
+        """
+        Preprocess image to center it and resize with a grey background visible through transparency,
+        using rembg for background removal.
+        """
+        # Convert image to numpy array
+        image_np = np.array(image)
+        has_alpha = image_np.shape[-1] == 4
+
+        # Handle cropping for RGBA with alpha, or use full image for RGB
+        if has_alpha:
+            alpha = image_np[..., 3] > 0
+            H, W = alpha.shape
+            y, x = np.where(alpha)
+            y0, y1 = max(y.min() - 1, 0), min(y.max() + 1, H)
+            x0, x1 = max(x.min() - 1, 0), min(x.max() + 1, W)
+            image_center = image_np[y0:y1, x0:x1]
+        else:
+            image_center = image_np
+            H, W = image_center.shape[:2]
+
+        # Resize the longer side to 90% of target dimensions
         if H > W:
             W = int(W * (height * 0.9) / H)
             H = int(height * 0.9)
         else:
             H = int(H * (width * 0.9) / W)
             W = int(width * 0.9)
-        image_center = np.array(Image.fromarray(image_center).resize((W, H)))
-        # pad to H, W
+
+        # Resize the image
+        image_center = np.array(Image.fromarray(image_center).resize((W, H), Image.LANCZOS))
+
+        # Use rembg to remove background
+        image_with_alpha = np.array(remove(Image.fromarray(image_center)))
+        image_center = image_with_alpha  # rembg returns an RGBA image
+
+        # Create output array with grey background (128 = 0.5 in float)
+        image_out = np.full((height, width, 4), [128, 128, 128, 255], dtype=np.uint8)
+
+        # Place the centered image
         start_h = (height - H) // 2
         start_w = (width - W) // 2
-        image = np.zeros((height, width, 4), dtype=np.uint8)
-        image[start_h: start_h + H, start_w: start_w + W] = image_center
-        image = image.astype(np.float32) / 255.0
-        image = image[:, :, :3] * image[:, :, 3:4] + (1 - image[:, :, 3:4]) * 0.5
-        image = (image * 255).clip(0, 255).astype(np.uint8)
-        image = Image.fromarray(image)
+        image_out[start_h:start_h + H, start_w:start_w + W] = image_center
 
-        return image
+        # Convert to float for blending
+        image_out = image_out.astype(np.float32) / 255.0
+
+        # Apply alpha blending with grey background
+        foreground = image_out[:, :, :3] * image_out[:, :, 3:4]
+        background = (1 - image_out[:, :, 3:4]) * 0.5
+        image_out = foreground + background
+
+        # Convert back to uint8
+        image_out = (image_out * 255).clip(0, 255).astype(np.uint8)
+
+        return Image.fromarray(image_out)
 
     def generate_control_images_from_mesh(self, mesh, num_views, height=768, width=768,
                                           camera_elevation_deg=[0, 0, 0, 0, 89.99, -89.99],
