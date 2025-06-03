@@ -105,42 +105,15 @@ class CameraProjection:
         uv_precompute_output = uv_precompute(
             self.ctx, mesh, height=uv_size, width=uv_size
         )
-        batch_size = 6
-        all_outputs = []
-
-        for i in range(0, len(cam), batch_size):
-            cam_batch = cam[i:i + batch_size]
-            out = uv_render_geometry(
-                self.ctx,
-                mesh,
-                cam_batch,
-                view_height=H,
-                view_width=W,
-                uv_precompute_output=uv_precompute_output,
-                compute_depth_grad=True,
-            )
-            all_outputs.append(out)
-
-        def cat_attr(attr: str):
-            values = [getattr(o, attr) for o in all_outputs if getattr(o, attr) is not None]
-            if len(values) == 0:
-                return None
-            return torch.cat(values, dim=0)
-
-        # Merge outputs
-        uv_render_geometry_output = type(all_outputs[0])(
-            uv_pos_proj=cat_attr("uv_pos_proj"),
-            uv_pos_error=cat_attr("uv_pos_error"),
-            uv_aoi_cos=cat_attr("uv_aoi_cos"),
-            uv_pos_ndc=cat_attr("uv_pos_ndc"),
-            view_mask=cat_attr("view_mask"),
-            view_normal=cat_attr("view_normal"),
-            view_aoi_cos=cat_attr("view_aoi_cos"),
-            view_position=cat_attr("view_position"),
-            view_depth=cat_attr("view_depth"),
-            view_depth_grad=cat_attr("view_depth_grad"),
-            uv_depth_grad=cat_attr("uv_depth_grad"),
-            view_attr=cat_attr("view_attr"),  # Will be None if not present
+        uv_render_geometry_output = uv_render_geometry(
+            self.ctx,
+            mesh,
+            cam,
+            view_height=H,
+            view_width=W,
+            uv_precompute_output=uv_precompute_output,
+            compute_depth_grad=True,
+            depth_grad_dilation=depth_grad_dilation,
         )
 
         # IoU rejection
