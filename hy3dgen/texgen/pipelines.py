@@ -23,7 +23,9 @@ import torch
 from PIL import Image
 
 from .differentiable_renderer.mesh_render import MeshRender
+from .mvadapter.pipelines.pipeline_mvadapter_i2mv_sdxl import MVAdapterI2MVSDXLPipeline
 from .mvadapter.pipelines.pipeline_texture import ModProcessConfig, TexturePipeline
+from ..text2image import HunyuanDiTPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +33,7 @@ logger = logging.getLogger(__name__)
 class Hunyuan3DTexGenConfig:
 
     def __init__(self, light_remover_ckpt_path, multiview_ckpt_path, mv_model='hunyuan3d-paint-v2-0',
-                 use_delight=False, device='cpu'):
+                 use_delight=False, device='cpu', mv_adapter_model_class=MVAdapterI2MVSDXLPipeline):
         self.device = device
         self.mv_model = mv_model
         self.light_remover_ckpt_path = light_remover_ckpt_path
@@ -63,6 +65,7 @@ class Hunyuan3DTexGenConfig:
         self.bake_exp = 8
         self.merge_method = 'fast'
 
+        self.mv_adapter_model_class = mv_adapter_model_class
         self.mv_adapter_inpaint_weights = "./weights/big-lama.pt"
 
         self.pipe_dict = {'hunyuan3d-paint-v2-0': 'hunyuanpaint',
@@ -74,7 +77,7 @@ class Hunyuan3DTexGenConfig:
 class Hunyuan3DPaintPipeline:
     @classmethod
     def from_pretrained(cls, model_path, mv_model='hunyuan3d-paint-v2-0', use_delight=False, local_files_only=False,
-                        device='cuda'):
+                        device='cuda', mv_adapter_model_class=MVAdapterI2MVSDXLPipeline):
         original_model_path = model_path
         if not os.path.exists(model_path):
             # try local path
@@ -101,7 +104,8 @@ class Hunyuan3DPaintPipeline:
                                              multiview_model_path,
                                              mv_model=mv_model,
                                              use_delight=use_delight,
-                                             device=device
+                                             device=device,
+                                             mv_adapter_model_class=mv_adapter_model_class
                                              ), local_files_only=local_files_only)
 
         raise FileNotFoundError(f"Model path {original_model_path} not found and we could not find it at huggingface")
@@ -124,13 +128,20 @@ class Hunyuan3DPaintPipeline:
             self.models['delight_model'] = Light_Shadow_Remover(self.config)
             print('Delight model loaded')
         print(f'Loading multiview model: {self.config.mv_model}')
+        self.models['t2i_model'] = None
         if self.config.mv_model == 'hunyuan3d-paint-v2-0' or self.config.mv_model == 'hunyuan3d-paint-v2-0-turbo':
             from .utils.multiview_utils import Multiview_Diffusion_Net
             self.models['multiview_model'] = Multiview_Diffusion_Net(self.config, local_files_only=local_files_only)
+            t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled',
+                                              local_files_only=local_files_only,
+                                              device=self.config.device)
+            self.models['t2i_model'] = t2i_pipeline
+
         elif self.config.mv_model == 'mv-adapter':
             from .mvadapter.pipeline import MVAdapterPipelineWrapper
             self.models['multiview_model'] = MVAdapterPipelineWrapper.from_pretrained(device=self.config.device,
-                                                                                      local_files_only=local_files_only)
+                                                                                      local_files_only=local_files_only,
+                                                                                      model_cls=self.config.mv_adapter_model_class)
         print('Multiview model loaded')
 
     def enable_model_cpu_offload(self, gpu_id: Optional[int] = None, device: Union[torch.device, str] = "cuda"):
@@ -245,7 +256,8 @@ class Hunyuan3DPaintPipeline:
     @torch.no_grad()
     def __call__(self,
                  mesh,
-                 images,
+                 images=None,
+                 prompt=None,
                  unwrap_method='xatlas',
                  upscale_model=None,
                  enhance_texture_angles=False,
@@ -261,20 +273,22 @@ class Hunyuan3DPaintPipeline:
         self.config.texture_size = texture_size
         self.render.set_default_texture_resolution(texture_size)
 
-        if not isinstance(images, List):
+        if images is not None and not isinstance(images, List):
             images = [images]
 
-        images_prompt = []
-        for i in range(len(images)):
-            if isinstance(images[i], str):
-                image_prompt = Image.open(images[i])
-            else:
-                image_prompt = images[i]
-            images_prompt.append(image_prompt)
+        images_prompt = None
+        if images is not None:
+            images_prompt = []
+            for i in range(len(images)):
+                if isinstance(images[i], str):
+                    image_prompt = Image.open(images[i])
+                else:
+                    image_prompt = images[i]
+                images_prompt.append(image_prompt)
 
-        images_prompt = [self.recenter_image(image_prompt) for image_prompt in images_prompt]
+            images_prompt = [self.recenter_image(image_prompt) for image_prompt in images_prompt]
 
-        if self.config.use_delight:
+        if images_prompt is not None and self.config.use_delight:
             print('Removing light and shadow...')
             t0 = time.time()
             images_prompt = [self.models['delight_model'](image_prompt) for image_prompt in images_prompt]
@@ -326,17 +340,29 @@ class Hunyuan3DPaintPipeline:
         print('Generate multiviews...')
         t0 = time.time()
         if self.config.mv_model in ['hunyuan3d-paint-v2-0', 'hunyuan3d-paint-v2-0-turbo']:
+
             multiviews = self.models['multiview_model'](images_prompt, normal_maps + position_maps, camera_info)
         elif self.config.mv_model == 'mv-adapter':
-            multiviews = self.models['multiview_model'](mesh,
-                                                        images_prompt[0],
-                                                        normal_maps,
-                                                        position_maps,
-                                                        camera_elevation_deg=selected_camera_elevs,
-                                                        camera_azimuth_deg=selected_camera_azims,
-                                                        num_views=len(selected_camera_azims),
-                                                        seed=seed,
-                                                        save_debug_images=debug)
+            if images_prompt is not None:
+                multiviews = self.models['multiview_model'](mesh,
+                                                            images_prompt[0],
+                                                            normal_maps,
+                                                            position_maps,
+                                                            camera_elevation_deg=selected_camera_elevs,
+                                                            camera_azimuth_deg=selected_camera_azims,
+                                                            num_views=len(selected_camera_azims),
+                                                            seed=seed,
+                                                            save_debug_images=debug)
+            else:
+                multiviews = self.models['multiview_model'](mesh,
+                                                            normal_maps,
+                                                            position_maps,
+                                                            prompt=prompt,
+                                                            camera_elevation_deg=selected_camera_elevs,
+                                                            camera_azimuth_deg=selected_camera_azims,
+                                                            num_views=len(selected_camera_azims),
+                                                            seed=seed,
+                                                            save_debug_images=debug)
         else:
             raise ValueError(f"Invalid MV model {self.config.mv_model}")
         t1 = time.time()

@@ -448,6 +448,12 @@ def replace_mesh_texture_and_save_gltflib(
             gltf.model.textures = [texture]
         return len(gltf.model.textures) - 1
 
+    # Avoid inconsistencies by centering the mesh with trimesh
+    tmesh = trimesh.load(input_path, force="mesh")
+    centroid = tmesh.vertices.mean(0)
+    tmesh.vertices = tmesh.vertices - centroid
+    tmesh.export(input_path)
+
     gltf = GLTF.load(input_path)
 
     texture = convert_image(texture)

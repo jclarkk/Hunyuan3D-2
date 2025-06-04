@@ -7,6 +7,7 @@ from typing import List, Union
 
 from .models.attention_processor import DecoupledMVRowColSelfAttnProcessor2_0
 from .pipelines.pipeline_mvadapter_i2mv_sdxl import MVAdapterI2MVSDXLPipeline
+from .pipelines.pipeline_mvadapter_t2mv_sdxl import MVAdapterT2MVSDXLPipeline
 from .schedulers.scheduling_shift_snr import ShiftSNRScheduler
 from .utils import get_orthogonal_camera, tensor_to_image
 
@@ -24,6 +25,7 @@ class MVAdapterPipelineWrapper:
             base_model: str = "lykon/dreamshaper-xl-v2-turbo",
             device: str = "cuda",
             local_files_only: bool = False,
+            model_cls=MVAdapterI2MVSDXLPipeline
     ):
         common_kwargs = dict(
             torch_dtype=torch.float16,
@@ -35,7 +37,10 @@ class MVAdapterPipelineWrapper:
             "vae": AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", **common_kwargs)
         }
 
-        pipe = MVAdapterI2MVSDXLPipeline.from_pretrained(base_model, **common_kwargs, **pipe_kwargs)
+        if model_cls == MVAdapterI2MVSDXLPipeline:
+            pipe = MVAdapterI2MVSDXLPipeline.from_pretrained(base_model, **common_kwargs, **pipe_kwargs)
+        elif model_cls == MVAdapterT2MVSDXLPipeline:
+            pipe = MVAdapterT2MVSDXLPipeline.from_pretrained(base_model, **common_kwargs, **pipe_kwargs)
 
         pipe.safety_checker = None
 
@@ -247,20 +252,24 @@ class MVAdapterPipelineWrapper:
         self.pipeline.cond_encoder.to(device='cuda', dtype=torch.float16)
         self.pipeline.to(device='cuda', dtype=torch.float16)
 
-        # Prepare reference image
-        if isinstance(image_prompt, str):
-            reference_image = Image.open(image_prompt)
-        else:
-            reference_image = image_prompt
+        reference_image = None
+        if image_prompt is not None:
+            # Prepare reference image
+            if isinstance(image_prompt, str):
+                reference_image = Image.open(image_prompt)
+            elif isinstance(image_prompt, List):
+                reference_image = image_prompt[0]
+            else:
+                reference_image = image_prompt
 
-        reference_image = self.preprocess_reference_image(reference_image, height, width)
+            reference_image = self.preprocess_reference_image(reference_image, height, width)
 
-        if save_debug_images:
-            import os
-            debug_dir = "debug_control_images"
-            os.makedirs(debug_dir, exist_ok=True)
+            if save_debug_images:
+                import os
+                debug_dir = "debug_control_images"
+                os.makedirs(debug_dir, exist_ok=True)
 
-            reference_image.save(os.path.join(debug_dir, "reference_image.png"))
+                reference_image.save(os.path.join(debug_dir, "reference_image.png"))
 
         # Generate control images
         if use_mesh_renderer and mesh is not None:
@@ -317,21 +326,36 @@ class MVAdapterPipelineWrapper:
             current_num_views = batch_end - batch_start
             batch_control_images = control_images[batch_start:batch_end]
 
-            output = self.pipeline(
-                prompt,
-                height=height,
-                width=width,
-                num_inference_steps=num_inference_steps,
-                guidance_scale=guidance_scale,
-                num_images_per_prompt=current_num_views,
-                control_image=batch_control_images,
-                control_conditioning_scale=control_conditioning_scale,
-                reference_image=reference_image,
-                reference_conditioning_scale=reference_conditioning_scale,
-                negative_prompt=negative_prompt,
-                generator=generator,
-                cross_attention_kwargs={"scale": lora_scale},
-            )
+            if reference_image is not None:
+                output = self.pipeline(
+                    prompt,
+                    height=height,
+                    width=width,
+                    num_inference_steps=num_inference_steps,
+                    guidance_scale=guidance_scale,
+                    num_images_per_prompt=current_num_views,
+                    control_image=batch_control_images,
+                    control_conditioning_scale=control_conditioning_scale,
+                    reference_image=reference_image,
+                    reference_conditioning_scale=reference_conditioning_scale,
+                    negative_prompt=negative_prompt,
+                    generator=generator,
+                    cross_attention_kwargs={"scale": lora_scale},
+                )
+            else:
+                output = self.pipeline(
+                    prompt,
+                    height=height,
+                    width=width,
+                    num_inference_steps=num_inference_steps,
+                    guidance_scale=guidance_scale,
+                    num_images_per_prompt=current_num_views,
+                    control_image=batch_control_images,
+                    control_conditioning_scale=control_conditioning_scale,
+                    negative_prompt=negative_prompt,
+                    generator=generator,
+                    cross_attention_kwargs={"scale": lora_scale},
+                )
             all_images.extend(output.images)
 
         if save_debug_images:
