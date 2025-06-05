@@ -141,4 +141,7 @@ def normalize_mesh(mesh: trimesh.Trimesh):
     mesh.remove_infinite_values()
     mesh.fix_normals()
 
+    centroid = mesh.vertices.mean(0)
+    mesh.vertices = mesh.vertices - centroid
+
     return mesh
