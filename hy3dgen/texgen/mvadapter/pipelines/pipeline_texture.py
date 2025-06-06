@@ -2,6 +2,7 @@ import numpy as np
 import os
 import torch
 import torch.nn.functional as F
+import trimesh
 from PIL import Image
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -155,7 +156,10 @@ class TexturePipeline:
             debug_dir = './debug'
             os.makedirs(debug_dir, exist_ok=True)
 
-        if uv_unwarp:
+        mesh = trimesh.load(mesh_path, force='mesh')
+        has_uv = hasattr(mesh.visual, 'uv') and mesh.visual.uv is not None and len(mesh.visual.uv) > 0
+
+        if uv_unwarp and not has_uv:
             file_suffix = os.path.splitext(mesh_path)[-1]
             mesh_path_new = mesh_path.replace(file_suffix, f"_unwarp{file_suffix}")
             process_raw(mesh_path, mesh_path_new, preprocess=preprocess_mesh)
