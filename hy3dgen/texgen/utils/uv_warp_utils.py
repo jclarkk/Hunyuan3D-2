@@ -28,7 +28,8 @@ def mesh_uv_wrap(mesh, padding=2, resolution=1024, max_iterations=4):
         large_mesh_mode = True
         print("Warning: The mesh has more than 100,000 faces, which may cause slowdowns.")
     if len(mesh.faces) > 200000:
-        raise ValueError("The mesh has more than 200,000 faces, which is not supported.")
+        # Try with open3d if the mesh is too large
+        return open3d_mesh_uv_wrap(mesh, resolution=resolution, use_fallback=False)
 
     vertices = np.asarray(mesh.vertices, dtype=np.float32)
     faces = np.asarray(mesh.faces, dtype=np.uint32)
@@ -66,7 +67,7 @@ def mesh_uv_wrap(mesh, padding=2, resolution=1024, max_iterations=4):
     return mesh
 
 
-def open3d_mesh_uv_wrap(mesh, gutter_size=2.0, max_stretch=0.06, resolution=1024):
+def open3d_mesh_uv_wrap(mesh, gutter_size=2.5, max_stretch=0.1666666716337204, resolution=1024, use_fallback=True):
     try:
         import open3d as o3d
         if isinstance(mesh, trimesh.Scene):
@@ -76,12 +77,12 @@ def open3d_mesh_uv_wrap(mesh, gutter_size=2.0, max_stretch=0.06, resolution=1024
         o3d_mesh.vertex.positions = o3d.core.Tensor(mesh.vertices)
         o3d_mesh.triangle.indices = o3d.core.Tensor(mesh.faces)
 
-        core_count = os.cpu_count()
-        print('Using Open3D for UV unwrapping with {} cores'.format(core_count))
+        core_count = max(os.cpu_count(), 16)
+        print('Using Open3D for UV unwrapping with {} threads'.format(core_count))
 
         o3d_mesh.compute_uvatlas(
             size=resolution,
-            parallel_partitions=4,
+            parallel_partitions=16,
             gutter=gutter_size,
             max_stretch=max_stretch,
             nthreads=core_count
@@ -100,9 +101,12 @@ def open3d_mesh_uv_wrap(mesh, gutter_size=2.0, max_stretch=0.06, resolution=1024
             uv=new_uv.astype(np.float32),
         )
     except Exception as e:
-        # Open3D might fail on mesh conditions so we will fallback to xatlas
-        print('Open3D failed to unwrap mesh, falling back to xatlas. Error: ', e)
-        return mesh_uv_wrap(mesh)
+        if use_fallback:
+            # Open3D might fail on mesh conditions so we will fallback to xatlas
+            print('Open3D failed to unwrap mesh, falling back to xatlas. Error: ', e)
+            return mesh_uv_wrap(mesh)
+        else:
+            raise e
 
     return mesh
 

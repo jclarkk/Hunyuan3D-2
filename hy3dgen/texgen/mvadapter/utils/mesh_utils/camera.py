@@ -4,9 +4,9 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional
 
-LIST_TYPE = Union[list, np.ndarray, torch.Tensor]
+from .utils import LIST_TYPE
 
 
 def list_to_pt(
@@ -118,17 +118,20 @@ class Camera:
     def __getitem__(self, index):
         if isinstance(index, int):
             sl = slice(index, index + 1)
-        elif isinstance(index, slice):
+        elif isinstance(index, slice) or isinstance(index, list):
             sl = index
         else:
             raise NotImplementedError
 
+        def safe_slice(tensor):
+            return tensor[sl].contiguous().clone() if tensor is not None else None
+
         return Camera(
-            c2w=self.c2w[sl] if self.c2w is not None else None,
-            w2c=self.w2c[sl],
-            proj_mtx=self.proj_mtx[sl],
-            mvp_mtx=self.mvp_mtx[sl],
-            cam_pos=self.cam_pos[sl] if self.cam_pos is not None else None,
+            c2w=safe_slice(self.c2w),
+            w2c=safe_slice(self.w2c),
+            proj_mtx=safe_slice(self.proj_mtx),
+            mvp_mtx=safe_slice(self.mvp_mtx),
+            cam_pos=safe_slice(self.cam_pos),
         )
 
     def to(self, device: Optional[str] = None):
@@ -156,11 +159,21 @@ def get_camera(
     aspect_wh: float = 1.0,
     near: float = 0.1,
     far: float = 100.0,
+    perturb_camera_position: Optional[float] = None,
     device: Optional[str] = None,
 ):
     if w2c is None:
         if c2w is None:
             c2w = get_c2w(elevation_deg, distance, azimuth_deg, num_views, device)
+            if perturb_camera_position is not None:
+                perturbed_pos = (
+                    c2w[:, :3, 3]
+                    + torch.randn_like(c2w[:, :3, 3]) * perturb_camera_position
+                )
+                perturbed_pos = (
+                    F.normalize(perturbed_pos, dim=-1)
+                    * ((c2w[:, :3, 3] ** 2).sum(-1) ** 0.5)[:, None]
+                )
         camera_positions = c2w[:, :3, 3]
         w2c = torch.linalg.inv(c2w)
     else:

@@ -23,6 +23,9 @@ import torch
 from PIL import Image
 
 from .differentiable_renderer.mesh_render import MeshRender
+from .mvadapter.pipelines.pipeline_mvadapter_i2mv_sdxl import MVAdapterI2MVSDXLPipeline
+from .mvadapter.pipelines.pipeline_texture import ModProcessConfig, TexturePipeline
+from ..text2image import HunyuanDiTPipeline
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +33,8 @@ logger = logging.getLogger(__name__)
 class Hunyuan3DTexGenConfig:
 
     def __init__(self, light_remover_ckpt_path, multiview_ckpt_path, mv_model='hunyuan3d-paint-v2-0',
-                 use_delight=False, device='cpu'):
+                 use_delight=False, device='cpu', mv_adapter_model_class=MVAdapterI2MVSDXLPipeline,
+                 baking_pipeline='hunyuan'):
         self.device = device
         self.mv_model = mv_model
         self.light_remover_ckpt_path = light_remover_ckpt_path
@@ -62,16 +66,21 @@ class Hunyuan3DTexGenConfig:
         self.bake_exp = 8
         self.merge_method = 'fast'
 
+        self.mv_adapter_model_class = mv_adapter_model_class
+        self.mv_adapter_inpaint_weights = "./weights/big-lama.pt"
+
         self.pipe_dict = {'hunyuan3d-paint-v2-0': 'hunyuanpaint',
                           'hunyuan3d-paint-v2-0-turbo': 'hunyuanpaint-turbo',
                           'mv-adapter': 'mv-adapter'}
         self.pipe_name = self.pipe_dict[mv_model]
 
+        self.baking_pipeline = baking_pipeline
+
 
 class Hunyuan3DPaintPipeline:
     @classmethod
     def from_pretrained(cls, model_path, mv_model='hunyuan3d-paint-v2-0', use_delight=False, local_files_only=False,
-                        device='cuda'):
+                        device='cuda', mv_adapter_model_class=MVAdapterI2MVSDXLPipeline, baking_pipeline='hunyuan'):
         original_model_path = model_path
         if not os.path.exists(model_path):
             # try local path
@@ -98,7 +107,9 @@ class Hunyuan3DPaintPipeline:
                                              multiview_model_path,
                                              mv_model=mv_model,
                                              use_delight=use_delight,
-                                             device=device
+                                             device=device,
+                                             mv_adapter_model_class=mv_adapter_model_class,
+                                             baking_pipeline=baking_pipeline
                                              ), local_files_only=local_files_only)
 
         raise FileNotFoundError(f"Model path {original_model_path} not found and we could not find it at huggingface")
@@ -121,13 +132,20 @@ class Hunyuan3DPaintPipeline:
             self.models['delight_model'] = Light_Shadow_Remover(self.config)
             print('Delight model loaded')
         print(f'Loading multiview model: {self.config.mv_model}')
+        self.models['t2i_model'] = None
         if self.config.mv_model == 'hunyuan3d-paint-v2-0' or self.config.mv_model == 'hunyuan3d-paint-v2-0-turbo':
             from .utils.multiview_utils import Multiview_Diffusion_Net
             self.models['multiview_model'] = Multiview_Diffusion_Net(self.config, local_files_only=local_files_only)
+            t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled',
+                                              local_files_only=local_files_only,
+                                              device=self.config.device)
+            self.models['t2i_model'] = t2i_pipeline
+
         elif self.config.mv_model == 'mv-adapter':
             from .mvadapter.pipeline import MVAdapterPipelineWrapper
             self.models['multiview_model'] = MVAdapterPipelineWrapper.from_pretrained(device=self.config.device,
-                                                                                      local_files_only=local_files_only)
+                                                                                      local_files_only=local_files_only,
+                                                                                      model_cls=self.config.mv_adapter_model_class)
         print('Multiview model loaded')
 
     def enable_model_cpu_offload(self, gpu_id: Optional[int] = None, device: Union[torch.device, str] = "cuda"):
@@ -242,53 +260,45 @@ class Hunyuan3DPaintPipeline:
     @torch.no_grad()
     def __call__(self,
                  mesh,
-                 images,
+                 images=None,
+                 prompt=None,
                  unwrap_method='xatlas',
                  upscale_model=None,
                  enhance_texture_angles=False,
                  pbr=False,
                  debug=False,
                  texture_size=1024,
-                 seed=42):
+                 seed=42,
+                 output_dir='./output',
+                 output_name='textured_mesh'):
+        if debug:
+            os.makedirs('./debug', exist_ok=True)
+
         self.config.texture_size = texture_size
         self.render.set_default_texture_resolution(texture_size)
 
-        if not isinstance(images, List):
+        if images is not None and not isinstance(images, List):
             images = [images]
 
-        images_prompt = []
-        for i in range(len(images)):
-            if isinstance(images[i], str):
-                image_prompt = Image.open(images[i])
-            else:
-                image_prompt = images[i]
-            images_prompt.append(image_prompt)
+        images_prompt = None
+        if images is not None:
+            images_prompt = []
+            for i in range(len(images)):
+                if isinstance(images[i], str):
+                    image_prompt = Image.open(images[i])
+                else:
+                    image_prompt = images[i]
+                images_prompt.append(image_prompt)
 
-        images_prompt = [self.recenter_image(image_prompt) for image_prompt in images_prompt]
+            images_prompt = [self.recenter_image(image_prompt) for image_prompt in images_prompt]
 
-        if self.config.use_delight:
+        if images_prompt is not None and self.config.use_delight:
             print('Removing light and shadow...')
             t0 = time.time()
             images_prompt = [self.models['delight_model'](image_prompt) for image_prompt in images_prompt]
 
             t1 = time.time()
             print(f"Light and shadow removal took {t1 - t0:.2f} seconds")
-
-        print('Wrapping UV...')
-        t0 = time.time()
-        if unwrap_method == 'open3d':
-            from .utils.uv_warp_utils import open3d_mesh_uv_wrap
-            mesh = open3d_mesh_uv_wrap(mesh, resolution=texture_size)
-        elif unwrap_method == 'bpy':
-            from .utils.uv_warp_utils import bpy_unwrap_mesh
-            mesh = bpy_unwrap_mesh(mesh)
-        elif unwrap_method == 'xatlas':
-            from .utils.uv_warp_utils import mesh_uv_wrap
-            mesh = mesh_uv_wrap(mesh, resolution=texture_size)
-        else:
-            raise ValueError(f"Invalid unwrap method {unwrap_method}")
-        t1 = time.time()
-        print(f"UV wrapping took {t1 - t0:.2f} seconds")
 
         self.render.load_mesh(mesh)
 
@@ -301,18 +311,20 @@ class Hunyuan3DPaintPipeline:
                 (self.config.candidate_camera_elevs, self.config.candidate_camera_azims,
                  self.config.candidate_view_weights)
 
-        print('Rendering normal maps...')
-        t0 = time.time()
-        normal_maps = self.render_normal_multiview(
-            selected_camera_elevs, selected_camera_azims, use_abs_coor=True)
-        position_maps = self.render_position_multiview(
-            selected_camera_elevs, selected_camera_azims)
-        t1 = time.time()
-        print(f"Rendering normal and position maps took {t1 - t0:.2f} seconds")
-        if debug:
-            for i in range(len(normal_maps)):
-                normal_maps[i].save(f'debug_normal_map_{i}.png')
-                position_maps[i].save(f'debug_position_map_{i}.png')
+        normal_maps, position_maps = None, None
+        if self.config.baking_pipeline == 'hunyuan':
+            print('Rendering normal maps...')
+            t0 = time.time()
+            normal_maps = self.render_normal_multiview(
+                selected_camera_elevs, selected_camera_azims, use_abs_coor=True)
+            position_maps = self.render_position_multiview(
+                selected_camera_elevs, selected_camera_azims)
+            t1 = time.time()
+            print(f"Rendering normal and position maps took {t1 - t0:.2f} seconds")
+            if debug:
+                for i in range(len(normal_maps)):
+                    normal_maps[i].save(f'debug_normal_map_{i}.png')
+                    position_maps[i].save(f'debug_position_map_{i}.png')
 
         if enhance_texture_angles:
             camera_info = [
@@ -332,10 +344,41 @@ class Hunyuan3DPaintPipeline:
         print('Generate multiviews...')
         t0 = time.time()
         if self.config.mv_model in ['hunyuan3d-paint-v2-0', 'hunyuan3d-paint-v2-0-turbo']:
+
             multiviews = self.models['multiview_model'](images_prompt, normal_maps + position_maps, camera_info)
         elif self.config.mv_model == 'mv-adapter':
-            multiviews = self.models['multiview_model'](mesh, images_prompt[0], normal_maps, position_maps, camera_info,
-                                                        len(selected_camera_azims), seed=seed)
+            if images_prompt is not None:
+                if self.config.baking_pipeline == 'hunyuan':
+                    multiviews = self.models['multiview_model'](mesh,
+                                                                images_prompt[0],
+                                                                normal_maps=normal_maps,
+                                                                position_maps=position_maps,
+                                                                camera_elevation_deg=selected_camera_elevs,
+                                                                camera_azimuth_deg=selected_camera_azims,
+                                                                num_views=len(selected_camera_azims),
+                                                                seed=seed,
+                                                                use_mesh_renderer=False,
+                                                                save_debug_images=debug)
+                else:
+                    multiviews = self.models['multiview_model'](mesh,
+                                                                images_prompt[0],
+                                                                camera_elevation_deg=selected_camera_elevs,
+                                                                camera_azimuth_deg=selected_camera_azims,
+                                                                num_views=len(selected_camera_azims),
+                                                                seed=seed,
+                                                                use_mesh_renderer=True,
+                                                                save_debug_images=debug)
+
+            else:
+                multiviews = self.models['multiview_model'](mesh,
+                                                            normal_maps,
+                                                            position_maps,
+                                                            prompt=prompt,
+                                                            camera_elevation_deg=selected_camera_elevs,
+                                                            camera_azimuth_deg=selected_camera_azims,
+                                                            num_views=len(selected_camera_azims),
+                                                            seed=seed,
+                                                            save_debug_images=debug)
         else:
             raise ValueError(f"Invalid MV model {self.config.mv_model}")
         t1 = time.time()
@@ -344,14 +387,14 @@ class Hunyuan3DPaintPipeline:
         if debug:
             for i in range(len(multiviews)):
                 image = multiviews[i]
-                image.save(f'debug_multiview_{i}.png')
+                image.save(f'./debug/debug_multiview_{i}.png')
 
         if upscale_model == 'Aura':
             from .upscalers.pipelines import AuraSRUpscalerPipeline
             upscaler = AuraSRUpscalerPipeline.from_pretrained()
-        elif upscale_model == 'RealESRGAN':
-            from .upscalers.pipelines import RealESRGANUpscalerPipeline
-            upscaler = RealESRGANUpscalerPipeline.from_pretrained(self.config.device)
+        elif upscale_model == 'NMKD':
+            from .upscalers.pipelines import NMKDSiaxUpscalerPipeline
+            upscaler = NMKDSiaxUpscalerPipeline.from_pretrained(self.config.device)
         elif upscale_model == 'InvSR':
             from .upscalers.pipelines import InvSRUpscalerPipeline
             upscaler = InvSRUpscalerPipeline.from_pretrained(self.config.device)
@@ -381,7 +424,7 @@ class Hunyuan3DPaintPipeline:
                     rgb_img = upscaler(rgb_img)
 
                     if debug:
-                        rgb_img.save(f'debug_multiview_{i}_upscaled.png')
+                        rgb_img.save(f'./debug/debug_multiview_{i}_upscaled.png')
 
                 rgb_img = rgb_img.resize((self.config.texture_size, self.config.texture_size))
 
@@ -399,48 +442,13 @@ class Hunyuan3DPaintPipeline:
                 multiviews[i] = multiviews[i].resize(
                     (self.config.texture_size, self.config.texture_size))
                 if debug:
-                    multiviews[i].save(f'debug_multiview_{i}.png')
+                    multiviews[i].save(f'./debug/debug_multiview_{i}.png')
 
-        print('Baking texture...')
-        t0 = time.time()
-        texture, mask = self.bake_from_multiview(multiviews,
-                                                 selected_camera_elevs, selected_camera_azims, selected_view_weights)
-        t1 = time.time()
-        print(f"Texture baking took {t1 - t0:.2f} seconds")
-
-        normal_texture, metallic_roughness_texture, metallic_factor, roughness_factor = None, None, None, None
+        roughness_multiviews, metallic_multiviews = [], []
         if pbr:
             from .pbr.pipelines import RGB2XPipeline
 
             pre_pbr_multiviews = [view.resize((1024, 1024)) for view in multiviews[:6]]
-            # Let's do normal map first
-            # t0 = time.time()
-            # normal_pipe = StableNormalPipeline.from_pretrained(self.config.device)
-            #
-            # normal_multiviews = []
-            # i = 0
-            # for view in pre_pbr_multiviews:
-            #     curr_normal_view = normal_pipe(view)
-            #
-            #     if debug:
-            #         curr_normal_view.save(f'debug_normal_multiview_{i}.png')
-            #     i += 1
-            #     normal_multiviews.append(curr_normal_view)
-            # t1 = time.time()
-            #
-            # print('Baking normal PBR texture...')
-            # normal_texture, normal_mask = self.bake_from_multiview(normal_multiviews,
-            #                                                 self.config.candidate_camera_elevs,
-            #                                                 self.config.candidate_camera_azims,
-            #                                                 self.config.candidate_view_weights,
-            #                                                 method=self.config.merge_method)
-            # normal_texture = self.texture_inpaint(normal_texture, normal_mask)
-            # normal_texture = normal_texture.cpu().numpy()
-            # normal_texture = Image.fromarray((normal_texture * 255).astype(np.uint8))
-            # if debug:
-            #     normal_texture.save(f'debug_normal_texture.png')
-            #
-            # print(f"Generating normal maps took {t1 - t0:.2f} seconds")
 
             pbr_pipeline = RGB2XPipeline.from_pretrained("cuda")
 
@@ -448,59 +456,154 @@ class Hunyuan3DPaintPipeline:
             albedo_multiviews, metallic_multiviews, _, roughness_multiviews = (
                 self.generate_pbr_for_batch(pbr_pipeline, pre_pbr_multiviews))
 
-            for i in range(len(albedo_multiviews)):
-                albedo_multiviews[i] = albedo_multiviews[i].resize((self.config.texture_size, self.config.texture_size))
-                roughness_multiviews[i] = roughness_multiviews[i].resize(
-                    (self.config.texture_size, self.config.texture_size))
-                metallic_multiviews[i] = metallic_multiviews[i].resize(
-                    (self.config.texture_size, self.config.texture_size))
-
-                if debug:
-                    albedo_multiviews[i].save(f'debug_albedo_multiview_{i}.png')
-                    roughness_multiviews[i].save(f'debug_roughness_multiview_{i}.png')
-                    metallic_multiviews[i].save(f'debug_metallic_multiview_{i}.png')
-
-            print('Baking roughness PBR texture...')
-            roughness_texture, roughness_mask = self.bake_from_multiview(roughness_multiviews,
-                                                                         self.config.candidate_camera_elevs,
-                                                                         self.config.candidate_camera_azims,
-                                                                         self.config.candidate_view_weights)
-            roughness_texture = self.texture_inpaint(roughness_texture, roughness_mask)
-            roughness_texture = roughness_texture.cpu().numpy()
-            roughness_texture = Image.fromarray((roughness_texture * 255).astype(np.uint8))
-            print('Baking metallic PBR texture...')
-            metallic_texture, metallic_mask = self.bake_from_multiview(metallic_multiviews,
-                                                                       self.config.candidate_camera_elevs,
-                                                                       self.config.candidate_camera_azims,
-                                                                       self.config.candidate_view_weights)
-            metallic_texture = self.texture_inpaint(metallic_texture, metallic_mask)
-            metallic_texture = metallic_texture.cpu().numpy()
-            metallic_texture = Image.fromarray((metallic_texture * 255).astype(np.uint8))
-            metallic_roughness_texture = pbr_pipeline.combine_roughness_metalness(
-                roughness_texture,
-                metallic_texture
-            )
-
-            roughness_factor, metallic_factor = 0.8, 0.8
-
             t2 = time.time()
-            print(f"PBR texture baking took {t2 - t0:.2f} seconds")
+            print(f"PBR texture generation took {t2 - t0:.2f} seconds")
 
-        mask_np = (mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
+        if self.config.baking_pipeline == 'mv-adapter':
+            # Use MV-Adapter for texture baking
+            texture_pipeline = TexturePipeline(self.config.mv_adapter_inpaint_weights,
+                                               device=self.config.device)
+            print('Baking texture with MV-Adapter...')
+            t0 = time.time()
 
-        print('Inpainting texture...')
-        t0 = time.time()
-        texture = self.texture_inpaint(texture, mask_np)
-        t1 = time.time()
-        print(f"Texture inpainting took {t1 - t0:.2f} seconds")
+            # Lets write all files like MV-Adapter expects
+            mv_input_dir = os.path.join(output_dir, 'mvadapter')
+            os.makedirs(mv_input_dir, exist_ok=True)
 
-        self.render.set_texture(texture)
-        textured_mesh = self.render.save_mesh(
-            normal_texture,
-            metallic_roughness_texture,
-            metallic_factor,
-            roughness_factor
-        )
+            mesh_path = os.path.join(mv_input_dir, f'tmp.glb')
+            mesh.export(mesh_path)
+
+            from .mvadapter.utils.saving import make_image_grid
+            mv_path = os.path.join(mv_input_dir, 'multiviews.png')
+            make_image_grid(multiviews, rows=1).save(mv_path)
+
+            if len(roughness_multiviews) > 0 and len(metallic_multiviews) > 0:
+                from .pbr.pipelines import RGB2XPipeline
+                # Combine roughness and metallic textures
+                orm_images = []
+                for i in range(len(roughness_multiviews)):
+                    orm_image = RGB2XPipeline.combine_roughness_metalness(
+                        roughness_multiviews[i],
+                        metallic_multiviews[i]
+                    )
+                    orm_images.append(orm_image)
+
+                orm_path = os.path.join(mv_input_dir, 'orm_multiviews.png')
+                make_image_grid(orm_images, rows=1).save(orm_path)
+
+                textured_mesh = texture_pipeline(
+                    mesh_path=mesh_path,
+                    move_to_center=True,
+                    save_dir=output_dir,
+                    save_name=output_name,
+                    uv_unwarp=True,
+                    preprocess_mesh=False,
+                    uv_size=self.config.texture_size,
+                    camera_elevation_deg=selected_camera_elevs,
+                    camera_azimuth_deg=selected_camera_azims,
+                    base_color_path=mv_path,
+                    base_color_process_config=ModProcessConfig(inpaint_mode='view'),
+                    orm_path=orm_path,
+                    orm_process_config=ModProcessConfig(inpaint_mode='view'),
+                    debug_mode=debug
+                )
+            else:
+                textured_mesh = texture_pipeline(
+                    mesh_path=mesh_path,
+                    move_to_center=True,
+                    save_dir=output_dir,
+                    save_name=output_name,
+                    uv_unwarp=True,
+                    preprocess_mesh=False,
+                    uv_size=self.config.texture_size,
+                    camera_elevation_deg=selected_camera_elevs,
+                    camera_azimuth_deg=selected_camera_azims,
+                    rgb_path=mv_path,
+                    rgb_process_config=ModProcessConfig(inpaint_mode='view'),
+                    debug_mode=debug
+                )
+            t1 = time.time()
+            print(f"Texture baking with MV-Adapter took {t1 - t0:.2f} seconds")
+        else:
+            # Use Hunyuan3D for texture baking
+            print('Wrapping UV...')
+            t0 = time.time()
+            if unwrap_method == 'open3d':
+                from .utils.uv_warp_utils import open3d_mesh_uv_wrap
+                mesh = open3d_mesh_uv_wrap(mesh, resolution=texture_size)
+            elif unwrap_method == 'bpy':
+                from .utils.uv_warp_utils import bpy_unwrap_mesh
+                mesh = bpy_unwrap_mesh(mesh)
+            elif unwrap_method == 'xatlas':
+                from .utils.uv_warp_utils import mesh_uv_wrap
+                mesh = mesh_uv_wrap(mesh, resolution=texture_size)
+            else:
+                raise ValueError(f"Invalid unwrap method {unwrap_method}")
+            t1 = time.time()
+            print(f"UV wrapping took {t1 - t0:.2f} seconds")
+
+            self.render.load_mesh(mesh)
+
+            normal_texture, metallic_roughness_texture, metallic_factor, roughness_factor = None, None, None, None
+            if pbr:
+                from .pbr.pipelines import RGB2XPipeline
+
+                for i in range(len(roughness_multiviews)):
+                    roughness_multiviews[i] = roughness_multiviews[i].resize(
+                        (self.config.texture_size, self.config.texture_size))
+                    metallic_multiviews[i] = metallic_multiviews[i].resize(
+                        (self.config.texture_size, self.config.texture_size))
+
+                    if debug:
+                        roughness_multiviews[i].save(f'debug_roughness_multiview_{i}.png')
+                        metallic_multiviews[i].save(f'debug_metallic_multiview_{i}.png')
+
+                print('Baking roughness PBR texture...')
+                roughness_texture, roughness_mask = self.bake_from_multiview(roughness_multiviews,
+                                                                             self.config.candidate_camera_elevs,
+                                                                             self.config.candidate_camera_azims,
+                                                                             self.config.candidate_view_weights)
+                roughness_texture = self.texture_inpaint(roughness_texture, roughness_mask)
+                roughness_texture = roughness_texture.cpu().numpy()
+                roughness_texture = Image.fromarray((roughness_texture * 255).astype(np.uint8))
+                print('Baking metallic PBR texture...')
+                metallic_texture, metallic_mask = self.bake_from_multiview(metallic_multiviews,
+                                                                           self.config.candidate_camera_elevs,
+                                                                           self.config.candidate_camera_azims,
+                                                                           self.config.candidate_view_weights)
+                metallic_texture = self.texture_inpaint(metallic_texture, metallic_mask)
+                metallic_texture = metallic_texture.cpu().numpy()
+                metallic_texture = Image.fromarray((metallic_texture * 255).astype(np.uint8))
+                metallic_roughness_texture = RGB2XPipeline.combine_roughness_metalness(
+                    roughness_texture,
+                    metallic_texture
+                )
+
+                roughness_factor, metallic_factor = 0.8, 0.8
+
+            print('Baking texture...')
+            t0 = time.time()
+            texture, mask = self.bake_from_multiview(multiviews,
+                                                     selected_camera_elevs, selected_camera_azims,
+                                                     selected_view_weights)
+            t1 = time.time()
+            print(f"Texture baking with Hunyuan3D took {t1 - t0:.2f} seconds")
+
+            mask_np = (mask.squeeze(-1).cpu().numpy() * 255).astype(np.uint8)
+
+            print('Inpainting texture...')
+            t0 = time.time()
+            texture = self.texture_inpaint(texture, mask_np)
+            t1 = time.time()
+            print(f"Texture inpainting took {t1 - t0:.2f} seconds")
+
+            self.render.set_texture(texture)
+            textured_mesh = self.render.save_mesh(
+                normal_texture,
+                metallic_roughness_texture,
+                metallic_factor,
+                roughness_factor
+            )
 
         return textured_mesh
 

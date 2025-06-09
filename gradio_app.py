@@ -30,6 +30,7 @@ from mmgp import offload
 
 from hy3dgen.mmgp_utils import replace_property_getter
 from hy3dgen.shapegen.utils import logger
+from hy3dgen.texgen.mvadapter.pipelines.pipeline_texture import TexturePipelineOutput
 
 MAX_SEED = int(1e7)
 
@@ -102,14 +103,14 @@ def randomize_seed_fn(seed: int, randomize_seed: bool) -> int:
     return seed
 
 
-def build_model_viewer_html(save_folder, height=660, width=790, textured=False):
+def build_model_viewer_html(glb_name, save_folder, height=660, width=790, textured=False):
     # Remove first folder from path to make relative path
     if textured:
-        related_path = f"./textured_mesh.glb"
+        related_path = f"./{glb_name}"
         template_name = './assets/modelviewer-textured-template.html'
         output_html_path = os.path.join(save_folder, f'textured_mesh.html')
     else:
-        related_path = f"./white_mesh.glb"
+        related_path = f"./{glb_name}"
         template_name = './assets/modelviewer-template.html'
         output_html_path = os.path.join(save_folder, f'white_mesh.html')
     offset = 50 if textured else 10
@@ -318,21 +319,33 @@ def generation_all(
         enhance_texture_angles=enhance_texture_angles,
         pbr=pbr,
         texture_size=texture_size,
-        unwrap_method=uv_unwrap_method
+        unwrap_method=uv_unwrap_method,
+        output_dir=save_folder,
+        output_name='textured_mesh',
+        debug=True
     )
     logger.info("---Texture Generation takes %s seconds ---" % (time.time() - tmp_time))
     stats['time']['texture generation'] = time.time() - tmp_time
     stats['time']['total'] = time.time() - start_time_0
 
-    textured_mesh.metadata['extras'] = stats
-    path_textured = export_mesh(textured_mesh, save_folder, textured=True)
-    model_viewer_html_textured = build_model_viewer_html(save_folder, height=HTML_HEIGHT, width=HTML_WIDTH,
+    if isinstance(textured_mesh, trimesh.Trimesh):
+        textured_mesh.metadata['extras'] = stats
+        glb_path = export_mesh(textured_mesh, save_folder, textured=True)
+    elif isinstance(textured_mesh, TexturePipelineOutput):
+        if textured_mesh.pbr_model_save_path is not None:
+            glb_path = textured_mesh.pbr_model_save_path
+        else:
+            glb_path = textured_mesh.shaded_model_save_path
+
+    glb_name = os.path.basename(glb_path)
+
+    model_viewer_html_textured = build_model_viewer_html(glb_name, save_folder, height=HTML_HEIGHT, width=HTML_WIDTH,
                                                          textured=True)
     torch.cuda.empty_cache()
 
     return (
         gr.update(value=path),
-        gr.update(value=path_textured),
+        gr.update(value=glb_path),
         model_viewer_html_textured,
         stats,
         seed,
@@ -376,7 +389,8 @@ def shape_generation(
     mesh.metadata['extras'] = stats
 
     path = export_mesh(mesh, save_folder, textured=False)
-    model_viewer_html = build_model_viewer_html(save_folder, height=HTML_HEIGHT, width=HTML_WIDTH)
+    glb_name = os.path.basename(path)
+    model_viewer_html = build_model_viewer_html(glb_name, save_folder, height=HTML_HEIGHT, width=HTML_WIDTH)
     return (
         gr.update(value=path),
         model_viewer_html,
@@ -493,7 +507,7 @@ def build_app():
                             num_chunks = gr.Slider(maximum=5000000, minimum=1000, value=8000,
                                                    label='Number of Chunks', min_width=100)
                         with gr.Row():
-                            texture_size = gr.Slider(minimum=1024, maximum=4096, step=1024, value=2048,
+                            texture_size = gr.Slider(minimum=1024, maximum=8192, step=1024, value=2048,
                                                      label='Texture Resolution')
                             enhance_texture = gr.Checkbox(label='Enhance Texture Angles', value=False)
                             pbr = gr.Checkbox(label='PBR Texture (Experimental, use the README in folder)', value=False)
@@ -502,7 +516,7 @@ def build_app():
                                                  value='None')
                         uv_unwrap_method = gr.Radio(['xatlas', 'open3d', 'bpy'], label='UV Unwrap Method',
                                                     value='xatlas')
-                        super_resolution = gr.Radio(['None', 'Aura', 'RealESRGAN', 'InvSR', 'Flux', 'SD-Upscaler'],
+                        super_resolution = gr.Radio(['None', 'Aura', 'NMKD', 'InvSR', 'Flux', 'SD-Upscaler', 'Topaz'],
                                                     label='Super-Resolution (Install the method required, use README in folder)',
                                                     value='None')
                     with gr.Tab("Export", id='tab_export'):
@@ -664,8 +678,9 @@ def build_app():
 
                 # for preview
                 save_folder = gen_save_folder()
-                _ = export_mesh(mesh, save_folder, textured=True)
-                model_viewer_html = build_model_viewer_html(save_folder, height=HTML_HEIGHT, width=HTML_WIDTH,
+                path = export_mesh(mesh, save_folder, textured=True)
+                glb_name = os.path.basename(path)
+                model_viewer_html = build_model_viewer_html(glb_name, save_folder, height=HTML_HEIGHT, width=HTML_WIDTH,
                                                             textured=True)
             else:
                 mesh = trimesh.load(file_out)
@@ -679,7 +694,8 @@ def build_app():
                 # for preview
                 save_folder = gen_save_folder()
                 _ = export_mesh(mesh, save_folder, textured=False)
-                model_viewer_html = build_model_viewer_html(save_folder, height=HTML_HEIGHT, width=HTML_WIDTH,
+                glb_name = os.path.basename(path)
+                model_viewer_html = build_model_viewer_html(glb_name, save_folder, height=HTML_HEIGHT, width=HTML_WIDTH,
                                                             textured=False)
             print(f'export to {path}')
             return model_viewer_html, gr.update(value=path, interactive=True)
@@ -717,6 +733,7 @@ if __name__ == '__main__':
     parser.add_argument('--verbose', type=str, default="1")
     parser.add_argument('--use_delight', action='store_true', help='Use Delight model', default=False)
     parser.add_argument('--mv_model', type=str, default='hunyuan3d-paint-v2-0', help='Multiview model to use')
+    parser.add_argument('--baking_pipeline', type=str, default='hunyuan', help='Baking pipeline to use')
     args = parser.parse_args()
 
     SAVE_DIR = args.cache_path
@@ -756,7 +773,8 @@ if __name__ == '__main__':
             texgen_worker = Hunyuan3DPaintPipeline.from_pretrained(args.texgen_model_path,
                                                                    mv_model=args.mv_model,
                                                                    use_delight=args.use_delight,
-                                                                   local_files_only=args.local_files_only)
+                                                                   local_files_only=args.local_files_only,
+                                                                   baking_pipeline=args.baking_pipeline)
             # Not help much, ignore for now.
             # if args.compile:
             #     texgen_worker.models['delight_model'].pipeline.unet.compile()

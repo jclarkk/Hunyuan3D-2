@@ -77,17 +77,17 @@ class InvSRUpscalerPipeline:
         return process_image(self.sampler, input_tensor)
 
 
-class RealESRGANUpscalerPipeline:
+class NMKDSiaxUpscalerPipeline:
     """
-        High quality upscaling with good performance using Real-ESRGAN
+        High quality upscaling with good performance using NMKD
     """
 
     @classmethod
     def from_pretrained(cls, device):
-        from realesrgan import RealESRGAN
+        from spandrel import ModelLoader
         # Initialize Real-ESRGAN with 4x upscaling model
-        model = RealESRGAN(device=device, scale=4)
-        model.load_weights('weights/RealESRGAN_x4plus.pth', download=True)
+        model = ModelLoader().load_from_file('./weights/4x_NMKD-Siax_200k.pth')
+        model.to(device).eval().half()
         return cls(model, device)
 
     def __init__(self, model, device):
@@ -95,14 +95,17 @@ class RealESRGANUpscalerPipeline:
         self.device = device
 
     def __call__(self, input_image: Image.Image) -> Image.Image:
-        # Convert PIL Image to numpy array
-        input_array = np.array(input_image)
+        from torchvision import transforms
 
-        # Perform upscaling
-        upscaled_array = self.model.predict(input_array)
+        to_pil = transforms.ToPILImage()
+        to_tensor = transforms.ToTensor()
 
-        # Convert back to PIL Image
-        return Image.fromarray(upscaled_array)
+        input_tensor = to_tensor(input_image).unsqueeze(0).to(self.device).half()
+
+        with torch.no_grad():
+            output = self.model(input_tensor).float().clamp(0, 1).squeeze(0).cpu()
+
+        return to_pil(output)
 
 
 class AuraSRUpscalerPipeline:

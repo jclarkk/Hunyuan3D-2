@@ -54,7 +54,7 @@ class RGB2XPipeline:
         return pbr_dict
 
     @staticmethod
-    def combine_roughness_metalness(roughness_map: np.ndarray, metalness_map: np.ndarray) -> Image.Image:
+    def combine_roughness_metalness(roughness_map: Image.Image, metalness_map: Image.Image) -> Image.Image:
         """Pack roughness into G channel and metalness into B channel."""
         metalness = np.array(metalness_map)
         roughness = np.array(roughness_map)

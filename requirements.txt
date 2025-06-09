@@ -1,3 +1,5 @@
+git+https://github.com/NVlabs/nvdiffrast.git
+
 ninja
 pybind11
 
@@ -19,13 +21,15 @@ huggingface-hub
 tqdm
 
 # Mesh Processing
-trimesh
-pymeshlab
-pygltflib
-xatlas
+cvcuda_cu12
 kornia
-open3d==0.19.0
 meshlib==3.0.4.121
+open3d==0.19.0
+pygltflib
+pymeshlab==2022.2.post4
+spandrel==0.4.1
+trimesh
+xatlas
 #facexlib
 
 # Training

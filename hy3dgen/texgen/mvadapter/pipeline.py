@@ -7,6 +7,7 @@ from typing import List, Union
 
 from .models.attention_processor import DecoupledMVRowColSelfAttnProcessor2_0
 from .pipelines.pipeline_mvadapter_i2mv_sdxl import MVAdapterI2MVSDXLPipeline
+from .pipelines.pipeline_mvadapter_t2mv_sdxl import MVAdapterT2MVSDXLPipeline
 from .schedulers.scheduling_shift_snr import ShiftSNRScheduler
 from .utils import get_orthogonal_camera, tensor_to_image
 
@@ -24,6 +25,7 @@ class MVAdapterPipelineWrapper:
             base_model: str = "lykon/dreamshaper-xl-v2-turbo",
             device: str = "cuda",
             local_files_only: bool = False,
+            model_cls=MVAdapterI2MVSDXLPipeline
     ):
         common_kwargs = dict(
             torch_dtype=torch.float16,
@@ -35,12 +37,17 @@ class MVAdapterPipelineWrapper:
             "vae": AutoencoderKL.from_pretrained("madebyollin/sdxl-vae-fp16-fix", **common_kwargs)
         }
 
-        pipe = MVAdapterI2MVSDXLPipeline.from_pretrained(base_model, **common_kwargs, **pipe_kwargs)
+        if model_cls == MVAdapterI2MVSDXLPipeline:
+            pipe = MVAdapterI2MVSDXLPipeline.from_pretrained(base_model, **common_kwargs, **pipe_kwargs)
+        elif model_cls == MVAdapterT2MVSDXLPipeline:
+            pipe = MVAdapterT2MVSDXLPipeline.from_pretrained(base_model, **common_kwargs, **pipe_kwargs)
 
         pipe.safety_checker = None
 
         pipe.scheduler = ShiftSNRScheduler.from_scheduler(
-            pipe.scheduler, shift_mode="interpolated", shift_scale=8.0
+            pipe.scheduler,
+            shift_mode="interpolated",
+            shift_scale=8.0
         )
         pipe.init_custom_adapter(num_views=6, self_attn_processor=DecoupledMVRowColSelfAttnProcessor2_0)
         pipe.load_custom_adapter(
@@ -116,7 +123,9 @@ class MVAdapterPipelineWrapper:
 
         return Image.fromarray(image_out)
 
-    def generate_control_images_from_mesh(self, mesh, num_views, height=768, width=768):
+    def generate_control_images_from_mesh(self, mesh, num_views, height=768, width=768,
+                                          camera_elevation_deg=[0, 0, 0, 0, 89.99, -89.99],
+                                          camera_azimuth_deg=[0, 90, 180, 270, 180, 180]):
         """
         Generate control images from a mesh using the original pipeline's approach.
         """
@@ -124,17 +133,17 @@ class MVAdapterPipelineWrapper:
 
         # Load the mesh
         mesh_copy = mesh.copy()
-        current_mesh = load_mesh(mesh_copy, rescale=True, device=self.device)
+        current_mesh = load_mesh(mesh_copy, rescale=True, move_to_center=True, device=self.device)
 
         # Prepare cameras using the same parameters as the original implementation
         cameras = get_orthogonal_camera(
-            elevation_deg=[0, 0, 0, 0, 89.99, -89.99],
+            elevation_deg=camera_elevation_deg,
             distance=[1.8] * num_views,
             left=-0.55,
             right=0.55,
             bottom=-0.55,
             top=0.55,
-            azimuth_deg=[x - 90 for x in [0, 90, 180, 270, 180, 180]],
+            azimuth_deg=[x - 90 for x in camera_azimuth_deg],
             device=self.device,
         )
 
@@ -202,7 +211,8 @@ class MVAdapterPipelineWrapper:
                  image_prompt: Union[str, Image.Image] = None,
                  normal_maps: List[Image.Image] = None,
                  position_maps: List[Image.Image] = None,
-                 camera_info: List[int] = None,
+                 camera_elevation_deg: List[int] = [0, 0, 0, 0, 89.99, -89.99],
+                 camera_azimuth_deg: List[int] = [0, 90, 180, 270, 180, 180],
                  num_views: int = 6,
                  seed: int = 42,
                  height: int = 1024,
@@ -213,7 +223,7 @@ class MVAdapterPipelineWrapper:
                  control_conditioning_scale: float = 1.0,
                  prompt: str = "high quality",
                  negative_prompt: str = "watermark, ugly, deformed, noisy, blurry, low contrast",
-                 use_mesh_renderer: bool = False,
+                 use_mesh_renderer: bool = True,
                  lora_scale: float = 1.0,
                  batch_size: int = 6,
                  save_debug_images: bool = False):
@@ -225,7 +235,6 @@ class MVAdapterPipelineWrapper:
             image_prompt: Reference image for conditioning (can be path or PIL Image)
             normal_maps: List of normal maps if not using mesh renderer
             position_maps: List of position maps if not using mesh renderer
-            camera_info: List of camera information if not using mesh renderer
             num_views: Number of views to generate
             seed: Random seed for reproducibility
             height: Height of the generated images
@@ -243,26 +252,35 @@ class MVAdapterPipelineWrapper:
         self.pipeline.cond_encoder.to(device='cuda', dtype=torch.float16)
         self.pipeline.to(device='cuda', dtype=torch.float16)
 
-        # Prepare reference image
-        if isinstance(image_prompt, str):
-            reference_image = Image.open(image_prompt)
-        else:
-            reference_image = image_prompt
+        reference_image = None
+        if image_prompt is not None:
+            # Prepare reference image
+            if isinstance(image_prompt, str):
+                reference_image = Image.open(image_prompt)
+            elif isinstance(image_prompt, List):
+                reference_image = image_prompt[0]
+            else:
+                reference_image = image_prompt
 
-        reference_image = self.preprocess_reference_image(reference_image, height, width)
+            reference_image = self.preprocess_reference_image(reference_image, height, width)
 
-        if save_debug_images:
-            import os
-            debug_dir = "debug_control_images"
-            os.makedirs(debug_dir, exist_ok=True)
+            if save_debug_images:
+                import os
+                debug_dir = "debug_control_images"
+                os.makedirs(debug_dir, exist_ok=True)
 
-            reference_image.save(os.path.join(debug_dir, "reference_image.png"))
+                reference_image.save(os.path.join(debug_dir, "reference_image.png"))
 
         # Generate control images
         if use_mesh_renderer and mesh is not None:
             # Use the MV-Adapter mesh rendering approach
             control_images, pos_images, normal_images = self.generate_control_images_from_mesh(
-                mesh, num_views, height, width
+                mesh,
+                num_views,
+                height,
+                width,
+                camera_azimuth_deg=camera_azimuth_deg,
+                camera_elevation_deg=camera_elevation_deg
             )
             source = "mesh"
         elif normal_maps is not None and position_maps is not None:
@@ -277,7 +295,7 @@ class MVAdapterPipelineWrapper:
         # Optionally save control images, position maps, and normal maps for visual inspection
         if save_debug_images:
             import os
-            debug_dir = "debug_control_images"
+            debug_dir = "./debug"
             os.makedirs(debug_dir, exist_ok=True)
 
             pos_tensor = control_images[:, :3, :, :]
@@ -299,8 +317,6 @@ class MVAdapterPipelineWrapper:
                 pos_images[i].save(os.path.join(debug_dir, f"orig_pos_view_{i}_{source}.png"))
                 normal_images[i].save(os.path.join(debug_dir, f"orig_norm_view_{i}_{source}.png"))
 
-        generator = torch.Generator(device=self.device).manual_seed(seed) if seed != -1 else None
-
         # Process in batches
         generator = torch.Generator(device=self.device).manual_seed(seed) if seed != -1 else None
         all_images = []
@@ -310,21 +326,36 @@ class MVAdapterPipelineWrapper:
             current_num_views = batch_end - batch_start
             batch_control_images = control_images[batch_start:batch_end]
 
-            output = self.pipeline(
-                prompt,
-                height=height,
-                width=width,
-                num_inference_steps=num_inference_steps,
-                guidance_scale=guidance_scale,
-                num_images_per_prompt=current_num_views,
-                control_image=batch_control_images,
-                control_conditioning_scale=control_conditioning_scale,
-                reference_image=reference_image,
-                reference_conditioning_scale=reference_conditioning_scale,
-                negative_prompt=negative_prompt,
-                generator=generator,
-                cross_attention_kwargs={"scale": lora_scale},
-            )
+            if reference_image is not None:
+                output = self.pipeline(
+                    prompt,
+                    height=height,
+                    width=width,
+                    num_inference_steps=num_inference_steps,
+                    guidance_scale=guidance_scale,
+                    num_images_per_prompt=current_num_views,
+                    control_image=batch_control_images,
+                    control_conditioning_scale=control_conditioning_scale,
+                    reference_image=reference_image,
+                    reference_conditioning_scale=reference_conditioning_scale,
+                    negative_prompt=negative_prompt,
+                    generator=generator,
+                    cross_attention_kwargs={"scale": lora_scale},
+                )
+            else:
+                output = self.pipeline(
+                    prompt,
+                    height=height,
+                    width=width,
+                    num_inference_steps=num_inference_steps,
+                    guidance_scale=guidance_scale,
+                    num_images_per_prompt=current_num_views,
+                    control_image=batch_control_images,
+                    control_conditioning_scale=control_conditioning_scale,
+                    negative_prompt=negative_prompt,
+                    generator=generator,
+                    cross_attention_kwargs={"scale": lora_scale},
+                )
             all_images.extend(output.images)
 
         if save_debug_images:

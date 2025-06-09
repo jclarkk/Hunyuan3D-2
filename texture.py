@@ -1,13 +1,16 @@
-import argparse
-import os
 import time
 
+import argparse
+import os
 import trimesh
 from PIL import Image
 
 from hy3dgen.rmbg import RMBGRemover
 from hy3dgen.shapegen.utils import normalize_mesh
 from hy3dgen.texgen import Hunyuan3DPaintPipeline
+from hy3dgen.texgen.mvadapter.pipelines.pipeline_mvadapter_i2mv_sdxl import MVAdapterI2MVSDXLPipeline
+from hy3dgen.texgen.mvadapter.pipelines.pipeline_mvadapter_t2mv_sdxl import MVAdapterT2MVSDXLPipeline
+from hy3dgen.texgen.mvadapter.pipelines.pipeline_texture import TexturePipelineOutput
 
 
 def run(args):
@@ -20,8 +23,8 @@ def run(args):
     if args.remesh_method not in [None, 'im', 'bpt', 'None']:
         raise ValueError("Re-mesh type must be either 'im' or 'bpt'")
 
-    if args.texture_size not in [1024, 2048, 3072, 4096]:
-        raise ValueError("Texture size must be one of 1024, 2048, 3072, 4096")
+    if args.texture_size not in [1024, 2048, 3072, 4096, 6144, 8192]:
+        raise ValueError("Texture size must be one of 1024, 2048, 3072, 4096, 6144, 8192")
 
     if args.unwrap_method not in ['xatlas', 'open3d', 'bpy']:
         raise ValueError("Unwrap method must be either 'xatlas', 'open3d' or 'bpy'")
@@ -33,24 +36,34 @@ def run(args):
         mesh = mesh.to_geometry()
 
     # Reduce face count
-    if (args.remesh_method is not None and args.remesh_method != 'None') or len(mesh.faces) > 200000:
+    face_limit = 200000
+    if args.mv_model == 'mv-adapter':
+        face_limit = 500000
+    if (args.remesh_method is not None and args.remesh_method != 'None') or len(mesh.faces) > face_limit:
         from hy3dgen.shapegen.postprocessors import FaceReducer
-        mesh = FaceReducer()(mesh, remesh_method=args.remesh_method, max_facenum=200000)
+        mesh = FaceReducer()(mesh, remesh_method=args.remesh_method, max_facenum=face_limit)
 
         # Check if face count is still too high
-        if len(mesh.faces) > 200000:
-            raise ValueError("Face count must be less than or equal to 200000")
+        if len(mesh.faces) > face_limit:
+            raise ValueError(f"Face count must be less than or equal to {face_limit}")
 
     t1 = time.time()
     print(f"Mesh pre-processing took {t1 - t0:.2f} seconds")
 
     t2 = time.time()
     # Load models
+    if args.prompt is not None:
+        mv_adapter_model_cls = MVAdapterT2MVSDXLPipeline
+    else:
+        mv_adapter_model_cls = MVAdapterI2MVSDXLPipeline
+
     texture_pipeline = Hunyuan3DPaintPipeline.from_pretrained('tencent/Hunyuan3D-2',
                                                               mv_model=args.mv_model,
                                                               use_delight=args.use_delight,
                                                               local_files_only=args.local_files_only,
-                                                              device='cpu' if args.use_mmgp else 'cuda')
+                                                              device='cpu' if args.use_mmgp else 'cuda',
+                                                              mv_adapter_model_class=mv_adapter_model_cls,
+                                                              baking_pipeline=args.baking_pipeline)
 
     t2i_pipeline = None
     # Handle MMGP offloading
@@ -59,13 +72,7 @@ def run(args):
 
         profile = args.profile
         kwargs = {}
-        if args.prompt is not None:
-            from hy3dgen.text2image import HunyuanDiTPipeline
-            t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled',
-                                              local_files_only=args.local_files_only,
-                                              device='cpu' if args.use_mmgp else 'cuda')
-            pipe = offload.extract_models("t2i_worker", t2i_pipeline)
-        pipe.update(offload.extract_models("texgen_worker", texture_pipeline))
+        pipe = offload.extract_models("texgen_worker", texture_pipeline)
         texture_pipeline.models["multiview_model"].pipeline.vae.use_slicing = True
 
         if profile != 1 and profile != 3:
@@ -77,26 +84,15 @@ def run(args):
     t3 = time.time()
     print(f"Model loading took {t3 - t2:.2f} seconds")
 
-    if args.prompt is not None:
-        if t2i_pipeline is None:
-            from hy3dgen.text2image import HunyuanDiTPipeline
-            t2i_pipeline = HunyuanDiTPipeline('Tencent-Hunyuan/HunyuanDiT-v1.1-Diffusers-Distilled',
-                                              local_files_only=args.local_files_only,
-                                              device='cpu' if args.use_mmgp else 'cuda')
-
-        t2 = time.time()
-        image = t2i_pipeline(args.prompt)
-        images = [image]
-        t3 = time.time()
-        print(f"Text to image took {t3 - t2:.2f} seconds")
-    else:
+    images = None
+    if args.prompt is None:
         # Only one image supported right now
         images = [Image.open(image_path) for image_path in args.image_paths]
 
     t4 = time.time()
     # Preprocess the image
-    processed_images = []
-    if args.mv_model == 'hunyuan3d-paint-v2-0':
+    if args.mv_model == 'hunyuan3d-paint-v2-0' and images is not None:
+        processed_images = []
         for image in images:
             rmbg_remover = RMBGRemover(local_files_only=args.local_files_only)
             image = rmbg_remover(image)
@@ -107,32 +103,41 @@ def run(args):
     t5 = time.time()
     print(f"Image processing took {t5 - t4:.2f} seconds")
 
+    # Use mesh file name as output name
+    output_name = os.path.splitext(os.path.basename(args.mesh_path))[0] + '_textured'
+    os.makedirs(args.output_dir, exist_ok=True)
+
     # Generate texture
     t6 = time.time()
     mesh = texture_pipeline(
         mesh,
-        processed_images,
+        images=processed_images,
+        prompt=args.prompt,
         unwrap_method=args.unwrap_method,
         upscale_model=args.upscale_model,
         pbr=args.pbr,
         debug=args.debug,
         texture_size=args.texture_size,
         enhance_texture_angles=args.enhance_texture_angles,
-        seed=args.seed
+        seed=args.seed,
+        output_dir=args.output_dir,
+        output_name=output_name,
     )
     t7 = time.time()
-    print(f"Texture generation took {t7 - t6:.2f} seconds")
+    if isinstance(mesh, trimesh.Trimesh):
+        print(f"Texture generation took {t7 - t6:.2f} seconds")
 
-    os.makedirs(args.output_dir, exist_ok=True)
+        mesh = normalize_mesh(mesh)
 
-    # Use mesh file name as output name
-    output_name = os.path.splitext(os.path.basename(args.mesh_path))[0] + '_textured'
+        mesh.export(os.path.join(args.output_dir, '{}.glb'.format(output_name)))
 
-    mesh = normalize_mesh(mesh)
-
-    mesh.export(os.path.join(args.output_dir, '{}.glb'.format(output_name)))
-
-    print(f"Output saved to {args.output_dir}/{output_name}.glb")
+        print(f"Output saved to {args.output_dir}/{output_name}.glb")
+    elif isinstance(mesh, TexturePipelineOutput):
+        if mesh.pbr_model_save_path is not None:
+            glb_path = mesh.pbr_model_save_path
+        else:
+            glb_path = mesh.shaded_model_save_path
+        print(f"Output saved to {glb_path}")
     print(f"Total time taken: {t7 - t0:.2f} seconds")
 
 
@@ -153,6 +158,7 @@ if __name__ == "__main__":
                         help='UV unwrap method. Must be either "xatlas", "open3d" or "bpy"', default='xatlas')
     parser.add_argument('--use_delight', action='store_true', help='Use Delight model', default=False)
     parser.add_argument('--mv_model', type=str, default='hunyuan3d-paint-v2-0', help='Multiview model to use')
+    parser.add_argument('--baking_pipeline', type=str, default='hunyuan', help='Baking pipeline to use')
     parser.add_argument('--upscale_model', type=str, default=None, help='Upscale model to use')
     parser.add_argument('--enhance_texture_angles', action='store_true', help='Enhance texture angles', default=False)
     parser.add_argument('--pbr', action='store_true', help='Generate PBR textures', default=False)
