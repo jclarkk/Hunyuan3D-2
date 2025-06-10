@@ -370,15 +370,28 @@ class Hunyuan3DPaintPipeline:
                                                                 save_debug_images=debug)
 
             else:
-                multiviews = self.models['multiview_model'](mesh,
-                                                            normal_maps,
-                                                            position_maps,
-                                                            prompt=prompt,
-                                                            camera_elevation_deg=selected_camera_elevs,
-                                                            camera_azimuth_deg=selected_camera_azims,
-                                                            num_views=len(selected_camera_azims),
-                                                            seed=seed,
-                                                            save_debug_images=debug)
+                if self.config.baking_pipeline == 'hunyuan':
+                    multiviews = self.models['multiview_model'](mesh,
+                                                                normal_maps=normal_maps,
+                                                                position_maps=position_maps,
+                                                                prompt=prompt,
+                                                                camera_elevation_deg=selected_camera_elevs,
+                                                                camera_azimuth_deg=selected_camera_azims,
+                                                                num_views=len(selected_camera_azims),
+                                                                seed=seed,
+                                                                use_mesh_renderer=False,
+                                                                save_debug_images=debug)
+                else:
+                    multiviews = self.models['multiview_model'](mesh,
+                                                                normal_maps=normal_maps,
+                                                                position_maps=position_maps,
+                                                                prompt=prompt,
+                                                                camera_elevation_deg=selected_camera_elevs,
+                                                                camera_azimuth_deg=selected_camera_azims,
+                                                                num_views=len(selected_camera_azims),
+                                                                seed=seed,
+                                                                use_mesh_renderer=True,
+                                                                save_debug_images=debug)
         else:
             raise ValueError(f"Invalid MV model {self.config.mv_model}")
         t1 = time.time()
