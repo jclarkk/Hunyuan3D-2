@@ -171,14 +171,14 @@ class Hunyuan3DOperator(bpy.types.Operator):
             props.status_message = f"Generating {mesh_type} with {prompt_type}...\n" \
                                    "This may take several minutes depending \n on your GPU power."
 
-        self.thread = threading.Thread(target=self.generate_model)
+        self.thread = threading.Thread(target=self.generate_model, args=[context])
         self.thread.start()
 
         wm = context.window_manager
         wm.modal_handler_add(self)
         return {'RUNNING_MODAL'}
 
-    def generate_model(self):
+    def generate_model(self, context):
         self.report({'INFO'}, f"Generation Start")
         base_url = self.api_url.rstrip('/')
 
@@ -252,6 +252,9 @@ class Hunyuan3DOperator(bpy.types.Operator):
                         },
                     )
             self.report({'INFO'}, f"Post Done")
+            self.task_finished = True
+            props = context.scene.gen_3d_props
+            props.is_processing = False
 
             if response.status_code != 200:
                 self.report({'ERROR'}, f"Generation failed: {response.text}")
@@ -288,6 +291,8 @@ class Hunyuan3DOperator(bpy.types.Operator):
 
         finally:
             self.task_finished = True
+            props = context.scene.gen_3d_props
+            props.is_processing = False
             self.selected_mesh_base64 = ""
 
 

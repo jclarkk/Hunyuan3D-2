@@ -79,7 +79,7 @@ class GELU(nn.Module):
         self.approximate = approximate
 
     def forward(self, x: Tensor) -> Tensor:
-        return nn.functional.gelu(x.contiguous(), approximate=self.approximate)
+        return nn.functional.gelu(x, approximate=self.approximate)
 
 
 class MLPEmbedder(nn.Module):
