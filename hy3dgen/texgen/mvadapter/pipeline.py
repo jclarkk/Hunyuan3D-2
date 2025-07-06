@@ -205,6 +205,14 @@ class MVAdapterPipelineWrapper:
 
         return control_images, position_maps, normal_maps
 
+    def to(self, device: str, dtype: torch.dtype = torch.float16):
+        """
+        Move the pipeline to the specified device and set the dtype.
+        """
+        self.pipeline.to(device=device, dtype=dtype)
+        self.pipeline.cond_encoder.to(device=device, dtype=dtype)
+        return self
+
     @torch.no_grad()
     def __call__(self,
                  mesh,
