@@ -18,8 +18,8 @@ from hy3dgen.texgen.mvadapter.pipelines.pipeline_texture import TexturePipelineO
 
 
 def run(args):
-    if args.face_count > 100000:
-        raise ValueError("Face count must be less than or equal to 100000")
+    if args.face_count > 200000:
+        raise ValueError("Face count must be less than or equal to 200000")
 
     if args.unwrap_method not in ['xatlas', 'open3d', 'bpy']:
         raise ValueError("Unwrap method must be either 'xatlas', 'open3d' or 'bpy'")
