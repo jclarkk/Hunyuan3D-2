@@ -2,7 +2,19 @@ import numpy as np
 import torch
 from PIL import Image
 from torchvision import transforms
-from transformers import AutoModelForImageSegmentation
+from transformers import AutoModelForImageSegmentation, AutoConfig
+
+from flashpack.integrations.transformers import FlashPackTransformersModelMixin
+
+# Dynamically get the base model class (registers custom code without loading weights)
+config = AutoConfig.from_pretrained('briaai/RMBG-2.0', trust_remote_code=True)
+dummy = AutoModelForImageSegmentation.from_config(config,trust_remote_code=True)
+BiRefNetClass = dummy.__class__
+del dummy  # Clean up
+
+class FlashPackRMBGModel(BiRefNetClass, FlashPackTransformersModelMixin):
+    pass
+
 
 
 class RMBGRemover:
@@ -23,10 +35,12 @@ class RMBGRemover:
             if not np.all(alpha == 255):
                 has_alpha = True
         if not has_alpha:
-            model = AutoModelForImageSegmentation.from_pretrained('ZhengPeng7/BiRefNet_HR',
-                                                                  trust_remote_code=True,
-                                                                  local_files_only=self.local_files_only)
-            torch.set_float32_matmul_precision(['high', 'highest'][0])
+            model = FlashPackRMBGModel.from_pretrained_flashpack(
+                './weights/rmbg-flashpack',
+                trust_remote_code=True,
+                local_files_only=self.local_files_only
+            )
+            torch.set_float32_matmul_precision('high')
             model.to('cuda')
             model.eval()
             # Data settings

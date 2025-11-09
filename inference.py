@@ -1,14 +1,15 @@
+import time
+__BOOT = time.perf_counter()
+
 import argparse
 import json
 import os
-import time
 
 import trimesh
 from uuid import uuid4
 
 import torch
 from PIL import Image
-from mmgp import offload
 
 from hy3dgen.rmbg import RMBGRemover
 from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline, FaceReducer, FloaterRemover, DegenerateFaceRemover, \
@@ -121,6 +122,7 @@ def run(args):
     print('3D DiT pipeline loaded. Took {:.2f} seconds'.format(t2 - t1))
 
     if args.use_mmgp:
+        from mmgp import offload
         from hy3dgen.mmgp_utils import replace_property_getter
         # Handle MMGP offloading
         profile = args.profile
@@ -198,6 +200,8 @@ def run(args):
 
 
 if __name__ == "__main__":
+    boot_overhead = time.perf_counter() - __BOOT
+
     # Parse arguments and then call run
     parser = argparse.ArgumentParser()
     parser.add_argument('--local_files_only', action='store_true', help='Use local models only')
@@ -226,9 +230,12 @@ if __name__ == "__main__":
     parser.add_argument('--profile', type=int, default=1)
     parser.add_argument('--verbose', type=int, default=1)
 
+    t0 = time.perf_counter()
     args = parser.parse_args()
 
-    t0 = time.time()
     run(args)
-    t1 = time.time()
-    print(f"Run time taken: {t1 - t0:.2f} seconds")
+    t1 = time.perf_counter()
+
+    print(f"Boot/import overhead: {boot_overhead:.2f}s")
+    print(f"Run time taken: {t1 - t0:.2f}s")
+    print(f"Total process wall time: {boot_overhead + (t1 - t0):.2f}s")
