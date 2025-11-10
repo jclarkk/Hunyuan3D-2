@@ -15,7 +15,7 @@ from hy3dgen.rmbg import RMBGRemover
 from hy3dgen.shapegen import Hunyuan3DDiTFlowMatchingPipeline, FaceReducer, FloaterRemover, DegenerateFaceRemover, \
     MeshlibCleaner
 from hy3dgen.shapegen.utils import normalize_mesh
-from hy3dgen.texgen.mvadapter.pipelines.pipeline_texture import TexturePipelineOutput
+from hy3dgen.texgen.mvadapter.pipelines.pipeline_output import TexturePipelineOutput
 
 
 def run(args):

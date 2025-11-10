@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from spandrel import ModelLoader
 from typing import List, Optional, Tuple
 
+from .pipeline_output import TexturePipelineOutput
 from ..utils import image_to_tensor, make_image_grid, tensor_to_image
 from ..utils.mesh_utils import (
     CameraProjection,
@@ -46,12 +47,6 @@ class ModProcessConfig:
     view_inpaint_min_rounds: int = 4
     view_inpaint_max_rounds: int = 8
     view_inpaint_uv_padding_end: bool = True
-
-
-@dataclass
-class TexturePipelineOutput:
-    shaded_model_save_path: Optional[str] = None
-    pbr_model_save_path: Optional[str] = None
 
 
 class TexturePipeline:
