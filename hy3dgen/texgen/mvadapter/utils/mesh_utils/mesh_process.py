@@ -3,7 +3,7 @@ import open3d as o3d
 import pymeshlab
 import torch
 import trimesh
-from pymeshlab import Percentage
+from pymeshlab import PercentageValue, PureValue
 
 
 ### Mesh Utils ###
@@ -75,7 +75,7 @@ def merge_close_vertices(ms, threshold=0.0001, verbose=False):
     m = ms.current_mesh()
     if verbose:
         print("... Initial vertex number is %d ... " % m.vertex_number())
-    ms.meshing_merge_close_vertices(threshold=Percentage(threshold * 100))
+    ms.meshing_merge_close_vertices(threshold=PercentageValue(threshold * 100))
     if verbose:
         print("... Merged vertex number is %d ... " % m.vertex_number())
         print("Merge vertices done!\n ")
@@ -96,7 +96,7 @@ def remove_isolated_pieces(ms, mincomponentsize=25, diameter=None, verbose=False
         )
     else:
         ms.meshing_remove_connected_component_by_diameter(
-            mincomponentdiag=Percentage(diameter), removeunref=True
+            mincomponentdiag=PercentageValue(diameter), removeunref=True
         )
     if verbose:
         print("... Isolated removed face number is %d ... " % m.face_number())
