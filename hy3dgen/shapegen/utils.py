@@ -137,7 +137,7 @@ def normalize_mesh(mesh: trimesh.Trimesh):
     # Ensure the mesh is watertight and normals are consistent
     mesh.rezero()
     mesh.remove_duplicate_faces()
-    mesh.remove_degenerate_faces()
+    mesh.update_faces(mesh.unique_faces())
     mesh.remove_infinite_values()
     mesh.fix_normals()
 
